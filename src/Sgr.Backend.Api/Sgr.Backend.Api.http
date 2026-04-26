@@ -1,0 +1,6 @@
+@Sgr.Backend.Api_HostAddress = http://localhost:5027
+
+GET {{Sgr.Backend.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

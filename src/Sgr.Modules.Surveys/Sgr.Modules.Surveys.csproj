@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Sgr.Domain\Sgr.Domain.csproj" />
+    <ProjectReference Include="..\Sgr.Persistence\Sgr.Persistence.csproj" />
+    <ProjectReference Include="..\Sgr.Modules.Templates\Sgr.Modules.Templates.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

@@ -427,3 +427,14 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# === SGR project specifics ===
+# Local storage de fotos para desarrollo
+storage-local/
+photos-local/
+# User Secrets locales sin checkin
+appsettings.Local.json
+appsettings.Development.local.json
+# DBs de desarrollo
+*.mdf
+*.ldf
