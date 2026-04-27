@@ -25,7 +25,7 @@ Documento de arquitectura técnica del sistema. Materializa todas las decisiones
 
 | Componente | Responsabilidad | Tecnología | Comunicación |
 |---|---|---|---|
-| **API REST (monolito)** | Expone el contrato público; orquesta los módulos internos; emite eventos al outbox del backend para los workers. | .NET 8 + ASP.NET Core | HTTPS · OpenAPI v1 |
+| **API REST (monolito)** | Expone el contrato público; orquesta los módulos internos; emite eventos al outbox del backend para los workers. | .NET 10 + ASP.NET Core | HTTPS · OpenAPI v1 |
 | **Worker de imágenes** | Normalización (resize, compresión), thumbnails, manejo de EXIF, indexación de metadata. Drena cola de trabajos `image_processing`. | .NET Worker Service | Lectura de cola en DB (table-driven) o Channels in-process según despliegue |
 | **Worker de sincronización** | Aplica eventos del outbox del backend, calcula candidatos a fusión, propaga notificaciones post-sync. | .NET Worker Service | Lectura de cola en DB |
 | **Frontend web** | Login, listado, edición, paneles de conflicto, wizard, plantillas. | Blazor Server + MudBlazor | Cliente HTTP del API REST |
@@ -154,6 +154,7 @@ Las decisiones ya tomadas en `PROJECT-BRIEF` Sec. 4 (DD-01 a DD-24) son la base.
 | [ADR-01](adr/ADR-01-monolito-modular-vs-microservicios_v1.0.md) | Monolito modular + workers vs. microservicios |
 | [ADR-02](adr/ADR-02-storage-hexagonal-multi-adaptador_v1.0.md) | Storage de fotos con arquitectura hexagonal multi-adaptador |
 | [ADR-03](adr/ADR-03-sincronizacion-outbox-y-lww-por-campo_v1.0.md) | Sincronización con outbox + LWW por campo + detección de candidatos a fusión |
+| [ADR-04](adr/ADR-04-migracion-net8-a-net10_v1.0.md) | Migración de .NET 8 a .NET 10 |
 
 ---
 

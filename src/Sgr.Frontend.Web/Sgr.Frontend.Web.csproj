@@ -1,14 +1,19 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.Cookies" Version="2.3.0" />
-    <PackageReference Include="MudBlazor" Version="7.15.0" />
+    <!--
+      Microsoft.AspNetCore.Authentication.Cookies 2.3.0 era un paquete legacy/transitivo.
+      Cookie auth viene incluido en el Microsoft.AspNetCore.App framework reference de net10,
+      no necesitamos el package.
+      MudBlazor 8.x — primera versión con soporte oficial para Blazor de net10.
+    -->
+    <PackageReference Include="MudBlazor" Version="8.5.1" />
   </ItemGroup>
 
 </Project>

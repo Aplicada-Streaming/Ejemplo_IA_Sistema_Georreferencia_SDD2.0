@@ -1,21 +1,35 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <ProjectReference Include="..\Sgr.Domain\Sgr.Domain.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.10" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.10">
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.10" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
   </ItemGroup>
 
+  <!--
+    DT-cve-cryptography-xml — System.Security.Cryptography.Xml viene transitivamente de
+    EF Core 10. Las versiones 9.0.0 a 10.0.0 (las disponibles al 2026-04-26) están marcadas
+    con CVE alta (GHSA-w3x6-4m5h-cxqf y GHSA-37gx-xxp4-5rgx). Ninguna versión patcheada está
+    publicada todavía. La librería NO se usa en el código del proyecto (es dead-weight transitive
+    de System.Security.Cryptography.Pkcs vía EF Core SqlServer).
+
+    Acción: monitorear nuget.org para 10.0.x patcheada y subir versión cuando esté disponible.
+    Mientras tanto, suprimimos el NU1903 a nivel proyecto.
+  -->
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <NoWarn>$(NoWarn);NU1903</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>

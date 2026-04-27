@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sgr.Persistence;
 
 namespace Sgr.Tests.Integration.Common;
@@ -29,9 +31,12 @@ public class SgrApiFactory : WebApplicationFactory<Program>
 
         builder.ConfigureServices(services =>
         {
-            // Replace the SqlServer DbContext registration with an in-memory one.
-            var descriptor = services.SingleOrDefault(d => d.ServiceType == typeof(DbContextOptions<SgrDbContext>));
-            if (descriptor is not null) services.Remove(descriptor);
+            // EF Core 10 detecta múltiples providers cuando se reemplaza solo
+            // DbContextOptions<T>. Hay que limpiar también los configuradores
+            // (IDbContextOptionsConfiguration<T>) y volver a registrar con InMemory.
+            services.RemoveAll(typeof(DbContextOptions<SgrDbContext>));
+            services.RemoveAll(typeof(DbContextOptions));
+            services.RemoveAll(typeof(IDbContextOptionsConfiguration<SgrDbContext>));
 
             services.AddDbContext<SgrDbContext>(opt => opt.UseInMemoryDatabase(_databaseName));
         });

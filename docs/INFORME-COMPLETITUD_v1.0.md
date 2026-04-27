@@ -55,7 +55,7 @@ Documento síntesis tras la ejecución completa de los subagentes SA-00 a SA-09.
 | Arquitectura de solución | [arquitectura-solucion_v1.0.md](05_arquitectura_tecnica/arquitectura-solucion_v1.0.md) | OK |
 | Contratos de interfaces | [contratos-interfaces_v1.0.md](05_arquitectura_tecnica/contratos-interfaces_v1.0.md) | OK |
 | Modelo de datos lógico | [modelo-datos-logico_v1.0.md](05_arquitectura_tecnica/modelo-datos-logico_v1.0.md) | OK |
-| 3 ADRs | [adr/](05_arquitectura_tecnica/adr/) | OK — ADR-01, 02, 03 (mínimo cumplido) |
+| 4 ADRs | [adr/](05_arquitectura_tecnica/adr/) | OK — ADR-01, 02, 03, 04 (ADR-04 incorporado por la migración a .NET 10) |
 
 ### SA-06 — Backlog Técnico
 | Artefacto | Path | Status |
@@ -245,6 +245,16 @@ Esta es la compuerta de aprobación. Por favor:
 ⚠️ No se iniciará ninguna fase de codeo sin tu aprobación explícita.
 ---
 ```
+
+---
+
+## 7. Migración a .NET 10
+
+- **Fecha:** 2026-04-26.
+- **Trigger:** bug bloqueante del workload installer en SDK 8 (`NullReferenceException` en `NetSdkMsiInstallerClient.GetCachedMsiPayload`, MSI cache corrupto) que impedía completar BT-09 (Setup MAUI Blazor Hybrid). En paralelo, el SDK 10 ya contaba con los workloads MAUI (`maui-android 10.0.20/10.0.100`) instalados y operativos en el entorno, y había un dispositivo Android físico (Motorola moto g42 ZY32GSJ88S) disponible para validar US-01/US-02 en móvil.
+- **Decisión justificatoria:** [ADR-04 — Migración de .NET 8 a .NET 10](05_arquitectura_tecnica/adr/ADR-04-migracion-net8-a-net10_v1.0.md). No cambia ninguna decisión de diseño (DD-01 a DD-24, ADR-01/02/03 intactos); sólo actualiza versión de runtime y paquetes.
+- **Deuda técnica asumida:** **DT-net10-sts** (.NET 10 es STS — 18 meses — vs. .NET 8 LTS). Plan: re-evaluar la migración al próximo LTS (.NET 12, noviembre 2026) dentro de la ventana de soporte. Adicional: **DT-openapi-native** (evaluar reemplazo de Swashbuckle por `Microsoft.AspNetCore.OpenApi` nativo en iteración posterior).
+- **Estado:** documentación SDD actualizada (arquitectura-solución, ADR-04 nuevo); código en migración.
 
 ---
 
