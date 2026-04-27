@@ -1,5 +1,6 @@
 @page "/"
 @attribute [Authorize]
+@inject NavigationManager Nav
 
 <PageTitle>SGR · Inicio</PageTitle>
 
@@ -34,3 +35,15 @@
         </MudAlert>
     </Authorized>
 </AuthorizeView>
+
+@code {
+    protected override void OnInitialized()
+    {
+        // Process-death resume: si veníamos de la cámara y Android mató el proceso,
+        // hay una ruta guardada en Preferences (<2 min). Volvemos directo allá en
+        // lugar de quedarnos en "Bienvenido".
+        var resume = Sgr.Frontend.Mobile.Camera.ProcessDeathResume.ConsumeResumePathIfRecent();
+        if (!string.IsNullOrEmpty(resume))
+            Nav.NavigateTo(resume, replace: true);
+    }
+}

@@ -1,0 +1,226 @@
+@page "/surveys/{SurveyId:guid}/track"
+@attribute [Authorize]
+@implements IAsyncDisposable
+@inject IContinuousGpsTracker Tracker
+@inject IOutboxEnqueueService Enqueue
+@inject IOutboxDrainer Drainer
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>SGR · Trazado móvil</PageTitle>
+
+<MudText Typo="Typo.h5" Class="mb-3">Trazado en movimiento</MudText>
+
+<MudPaper Class="pa-4" Elevation="2">
+
+    <MudAlert Severity="Severity.Info" Class="mb-3" Icon="@Icons.Material.Filled.DirectionsCar">
+        Modo móvil (Slice 3.5): cada @Profile.SamplingIntervalSeconds s se pide un GPS y
+        se acepta si la precisión es ≤@Profile.AccuracyThresholdMeters m y está más de
+        @Profile.DiscardRadiusMeters m del último punto aceptado.
+    </MudAlert>
+
+    @if (_isRunning)
+    {
+        <MudPaper Class="pa-3 mb-3" Elevation="0" Style="background: var(--mud-palette-success-lighten);">
+            <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                <MudProgressCircular Size="Size.Small" Color="Color.Success" Indeterminate="true" />
+                <MudText Typo="Typo.body1"><strong>Trazando…</strong></MudText>
+            </MudStack>
+        </MudPaper>
+    }
+    else if (_accepted > 0 || _discarded > 0)
+    {
+        <MudPaper Class="pa-3 mb-3" Elevation="0" Style="background: var(--mud-palette-background-grey);">
+            <MudText Typo="Typo.body2"><strong>Sesión detenida.</strong> Los puntos aceptados quedaron en el outbox.</MudText>
+        </MudPaper>
+    }
+    else
+    {
+        <MudPaper Class="pa-4 mb-3" Elevation="0" Style="text-align:center; background: var(--mud-palette-background-grey);">
+            <MudIcon Icon="@Icons.Material.Filled.Route" Size="Size.Large" Color="Color.Default" />
+            <MudText Typo="Typo.body1" Class="mt-2 mud-text-secondary">
+                Tap "Iniciar" para arrancar el trazado.
+            </MudText>
+        </MudPaper>
+    }
+
+    @* ---- Contadores ---- *@
+    <MudPaper Class="pa-3 mb-3" Elevation="0" Style="border:1px solid var(--mud-palette-lines-default); border-radius:8px;">
+        <MudStack Row Justify="Justify.SpaceAround" Spacing="2">
+            <div style="text-align:center;">
+                <MudText Typo="Typo.h4" Color="Color.Success">@_accepted</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">aceptados</MudText>
+            </div>
+            <MudDivider Vertical="true" FlexItem="true" />
+            <div style="text-align:center;">
+                <MudText Typo="Typo.h4" Color="Color.Warning">@_discarded</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">descartados</MudText>
+            </div>
+        </MudStack>
+    </MudPaper>
+
+    @if (_lastPoint is not null)
+    {
+        <MudPaper Class="pa-3 mb-3" Elevation="0" Style="background: var(--mud-palette-info-lighten);">
+            <MudText Typo="Typo.body2"><strong>Último aceptado</strong></MudText>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                lat @_lastPoint.Latitude.ToString("F6") · lng @_lastPoint.Longitude.ToString("F6") ·
+                ±@_lastPoint.AccuracyMeters.ToString("F0") m ·
+                @_lastPoint.CapturedAtUtc.ToLocalTime().ToString("HH:mm:ss")
+            </MudText>
+        </MudPaper>
+    }
+
+    @if (_lastError is not null)
+    {
+        <MudAlert Severity="Severity.Warning" Class="mb-3">
+            @_lastError
+        </MudAlert>
+    }
+
+    @* ---- Acciones ---- *@
+    @if (!_isRunning)
+    {
+        <MudButton Variant="Variant.Filled" Color="Color.Success" FullWidth="true"
+                   StartIcon="@Icons.Material.Filled.PlayArrow"
+                   OnClick="StartAsync">
+            Iniciar trazado
+        </MudButton>
+    }
+    else
+    {
+        <MudButton Variant="Variant.Filled" Color="Color.Error" FullWidth="true"
+                   StartIcon="@Icons.Material.Filled.Stop"
+                   OnClick="StopAsync">
+            Detener trazado
+        </MudButton>
+    }
+
+    <MudButton Variant="Variant.Text" Color="Color.Default" FullWidth="true" Class="mt-2"
+               StartIcon="@Icons.Material.Filled.Map"
+               Href="@($"/surveys/{SurveyId}/map")"
+               Disabled="_isRunning">
+        Ver puntos en el mapa
+    </MudButton>
+
+    <MudButton Variant="Variant.Text" Color="Color.Default" FullWidth="true" Class="mt-1"
+               StartIcon="@Icons.Material.Filled.ArrowBack"
+               Href="/surveys"
+               Disabled="_isRunning">
+        Volver
+    </MudButton>
+</MudPaper>
+
+@code {
+    [Parameter] public Guid SurveyId { get; set; }
+
+    private static readonly CaptureModeProfile Profile = CaptureModeProfiles.Movil;
+
+    private bool _isRunning;
+    private int _accepted;
+    private int _discarded;
+    private TrackedPoint? _lastPoint;
+    private string? _lastError;
+
+    private CancellationTokenSource? _cts;
+
+    private async Task StartAsync()
+    {
+        if (_isRunning) return;
+        _isRunning = true;
+        _accepted = 0;
+        _discarded = 0;
+        _lastPoint = null;
+        _lastError = null;
+
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+
+        var callbacks = new TrackingCallbacks(
+            OnAccepted: HandleAcceptedAsync,
+            OnDiscarded: HandleDiscardedAsync,
+            OnError: HandleErrorAsync);
+
+        try
+        {
+            await Tracker.StartAsync(Profile, callbacks, _cts.Token);
+            Snackbar.Add("Trazado iniciado.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            _isRunning = false;
+            Snackbar.Add($"No se pudo iniciar el trazado: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task StopAsync()
+    {
+        try
+        {
+            _cts?.Cancel();
+            await Tracker.StopAsync();
+        }
+        finally
+        {
+            _isRunning = false;
+            Snackbar.Add($"Trazado detenido. {_accepted} aceptado(s), {_discarded} descartado(s).",
+                Severity.Info);
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleAcceptedAsync(TrackedPoint p)
+    {
+        try
+        {
+            var pointId = Guid.NewGuid();
+            await Enqueue.EnqueuePointCreatedAsync(
+                surveyId: SurveyId,
+                pointId: pointId,
+                latitude: p.Latitude,
+                longitude: p.Longitude,
+                accuracyM: p.AccuracyMeters,
+                captureMode: Profile.Mode,
+                timestamp: p.CapturedAtUtc);
+
+            _ = Drainer.DrainOnceAsync();
+
+            await InvokeAsync(() =>
+            {
+                _accepted++;
+                _lastPoint = p;
+                _lastError = null;
+                StateHasChanged();
+            });
+        }
+        catch (Exception ex)
+        {
+            await InvokeAsync(() =>
+            {
+                _lastError = $"Falló al encolar punto: {ex.Message}";
+                StateHasChanged();
+            });
+        }
+    }
+
+    private Task HandleDiscardedAsync(TrackedPointDiscarded d) =>
+        InvokeAsync(() =>
+        {
+            _discarded++;
+            StateHasChanged();
+        });
+
+    private Task HandleErrorAsync(string message) =>
+        InvokeAsync(() =>
+        {
+            _lastError = message;
+            StateHasChanged();
+        });
+
+    public async ValueTask DisposeAsync()
+    {
+        try { _cts?.Cancel(); } catch { }
+        try { await Tracker.StopAsync(); } catch { }
+        _cts?.Dispose();
+    }
+}

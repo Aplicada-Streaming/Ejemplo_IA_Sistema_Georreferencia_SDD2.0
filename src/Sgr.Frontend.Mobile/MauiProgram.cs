@@ -57,6 +57,10 @@ public static class MauiProgram
         // GPS / geolocalización (E.3.1, US-06 parcial: máquina S0-S3 sin foto/mapa).
         builder.Services.AddSingleton<IGeolocationService, MauiGeolocationService>();
 
+        // Tracker continuo para modo móvil (E.3.5). Singleton: una sola instancia
+        // viva en la app; la lógica de Start/Stop la maneja la página de trazado.
+        builder.Services.AddSingleton<IContinuousGpsTracker, MauiContinuousGpsTracker>();
+
         // Cámara + foto (E.3.3, US-06).
         builder.Services.AddSingleton<ICameraCaptureService, MauiCameraCaptureService>();
 

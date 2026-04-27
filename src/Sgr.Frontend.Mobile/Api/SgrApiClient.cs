@@ -46,12 +46,18 @@ public sealed class SgrApiClient : ISgrApiClient
     private readonly HttpClient _http;
     private readonly IMobileTokenStore _store;
     private readonly IDeviceIdProvider _device;
+    private readonly MobileAuthenticationStateProvider _auth;
 
-    public SgrApiClient(HttpClient http, IMobileTokenStore store, IDeviceIdProvider device)
+    public SgrApiClient(
+        HttpClient http,
+        IMobileTokenStore store,
+        IDeviceIdProvider device,
+        MobileAuthenticationStateProvider auth)
     {
         _http = http;
         _store = store;
         _device = device;
+        _auth = auth;
     }
 
     public async Task<LoginResult> LoginAsync(string email, string password, CancellationToken ct = default)
@@ -89,6 +95,7 @@ public sealed class SgrApiClient : ISgrApiClient
         await AttachAuthAsync(request);
 
         using var response = await _http.SendAsync(request, ct);
+        await ThrowIfUnauthorizedAsync(response);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<IReadOnlyList<SurveyDto>>(cancellationToken: ct)
             ?? Array.Empty<SurveyDto>();
@@ -100,6 +107,7 @@ public sealed class SgrApiClient : ISgrApiClient
         await AttachAuthAsync(request);
 
         using var response = await _http.SendAsync(request, ct);
+        await ThrowIfUnauthorizedAsync(response);
         if (!response.IsSuccessStatusCode)
         {
             var problem = await ReadProblemAsync(response, ct);
@@ -124,6 +132,7 @@ public sealed class SgrApiClient : ISgrApiClient
         await AttachAuthAsync(request);
 
         using var response = await _http.SendAsync(request, ct);
+        await ThrowIfUnauthorizedAsync(response);
         if (!response.IsSuccessStatusCode)
         {
             var problem = await ReadProblemAsync(response, ct);
@@ -150,6 +159,7 @@ public sealed class SgrApiClient : ISgrApiClient
         await AttachAuthAsync(request);
 
         using var response = await _http.SendAsync(request, ct);
+        await ThrowIfUnauthorizedAsync(response);
         if (!response.IsSuccessStatusCode)
         {
             var problem = await ReadProblemAsync(response, ct);
@@ -191,6 +201,7 @@ public sealed class SgrApiClient : ISgrApiClient
         await AttachAuthAsync(request);
 
         using var response = await _http.SendAsync(request, ct);
+        await ThrowIfUnauthorizedAsync(response);
         if (!response.IsSuccessStatusCode)
         {
             var problem = await ReadProblemAsync(response, ct);
@@ -209,8 +220,34 @@ public sealed class SgrApiClient : ISgrApiClient
     private async Task AttachAuthAsync(HttpRequestMessage request)
     {
         var session = await _store.GetAsync();
-        if (session is not null)
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", session.AccessToken);
+        if (session is null) throw await SessionExpiredAsync();
+
+        // ROPC bearer sin refresh token (DT-01): cuando expira, hay que volver a loguearse.
+        // Detectamos el caso acá para no hacer el roundtrip y caer en un 401 después.
+        if (session.ExpiresAtUtc <= DateTime.UtcNow)
+            throw await SessionExpiredAsync();
+
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", session.AccessToken);
+    }
+
+    private async Task<SgrApiException> SessionExpiredAsync()
+    {
+        // Limpia el token + notifica al AuthenticationStateProvider para que [Authorize]
+        // dispare el RedirectToLogin en la próxima evaluación del routing.
+        await _auth.SignOutAsync();
+        return new SgrApiException(
+            (int)HttpStatusCode.Unauthorized,
+            "Sesión expirada",
+            "Tu sesión expiró. Volvé a iniciar sesión.",
+            errorCode: "session_expired");
+    }
+
+    /// <summary>Detecta 401 del servidor (token revocado / inválido del lado server) y
+    /// dispara el mismo flujo de signout. Llamar antes de los handlers de error específicos.</summary>
+    private async Task ThrowIfUnauthorizedAsync(HttpResponseMessage response)
+    {
+        if (response.StatusCode == HttpStatusCode.Unauthorized)
+            throw await SessionExpiredAsync();
     }
 
     private static async Task<ProblemDetailsDto?> ReadProblemAsync(HttpResponseMessage response, CancellationToken ct)

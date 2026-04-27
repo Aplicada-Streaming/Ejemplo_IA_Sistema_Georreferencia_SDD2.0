@@ -190,6 +190,10 @@
             // para no acumular bytes en AppDataDirectory por descarte.
             DiscardPhoto();
 
+            // Process-death resume: si Android mata el proceso mientras está la cámara,
+            // queremos volver acá y no a "/". Se limpia abajo en el finally si todo OK.
+            ProcessDeathResume.MarkResumePath($"/surveys/{SurveyId}/points/new");
+
             var photoId = Guid.NewGuid();
             var result = await Camera.CaptureAsync(photoId);
 
@@ -217,6 +221,9 @@
         }
         finally
         {
+            // Si llegamos acá es porque NO hubo process-death (sobrevivimos al intent).
+            // Limpiamos la marca para no redirigir al usuario en futuras sesiones.
+            ProcessDeathResume.ClearResumePath();
             _capturingPhoto = false;
         }
     }

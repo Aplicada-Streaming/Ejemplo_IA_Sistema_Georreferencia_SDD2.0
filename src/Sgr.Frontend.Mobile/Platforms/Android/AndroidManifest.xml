@@ -3,8 +3,15 @@
   <application android:allowBackup="true"
                android:icon="@mipmap/appicon"
                android:roundIcon="@mipmap/appicon_round"
+               android:largeHeap="true"
                android:supportsRtl="true"
                android:usesCleartextTraffic="true" />
+  <!--
+    largeHeap=true: pide al OS más memoria para la app.
+    El intent de la cámara es pesado y, con heap default, Android frecuentemente
+    mata el proceso de SGR mientras está la cámara abierta (process death).
+    Eso obligaba a Blazor a arrancar en `/` perdiendo el state de PointCreate.
+  -->
   <!--
     usesCleartextTraffic=true permite HTTP plano (sin TLS) hacia el backend
     durante desarrollo (localhost vía adb reverse). En producción TLS es obligatorio.

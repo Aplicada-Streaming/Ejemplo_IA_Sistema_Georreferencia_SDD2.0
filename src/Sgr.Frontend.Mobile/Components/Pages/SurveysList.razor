@@ -53,6 +53,10 @@ else
                                    Color="Color.Default" Size="Size.Medium"
                                    Href="@($"/surveys/{s.Id}/map")"
                                    aria-label="Ver mapa" />
+                    <MudIconButton Icon="@Icons.Material.Filled.DirectionsCar"
+                                   Color="Color.Default" Size="Size.Medium"
+                                   Href="@($"/surveys/{s.Id}/track")"
+                                   aria-label="Trazado móvil" />
                     <MudIconButton Icon="@Icons.Material.Filled.AddLocationAlt"
                                    Color="Color.Primary" Size="Size.Medium"
                                    Href="@($"/surveys/{s.Id}/points/new")"
