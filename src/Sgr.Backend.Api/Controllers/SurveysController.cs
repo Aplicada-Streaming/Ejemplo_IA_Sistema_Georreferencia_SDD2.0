@@ -137,6 +137,25 @@ public sealed class SurveysController : ControllerBase
     {
         var current = CurrentUserAccessor.FromPrincipal(User);
         var fmt = (format ?? "csv").Trim().ToLowerInvariant();
+
+        // ZIP streaming directo a Response.Body para no buffearlo en memoria
+        // (DT-export-zip-streaming). Los otros formatos siguen como byte[]
+        // porque son chicos (KBs).
+        if (fmt == "zip")
+        {
+            // ZipArchive.Dispose escribe el central directory con I/O síncrono;
+            // Kestrel bloquea eso por default. Habilitamos sync I/O sólo para
+            // esta request — la alternativa es bufferear todo el ZIP en memoria
+            // (lo que justamente queremos evitar).
+            var syncIo = HttpContext.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpBodyControlFeature>();
+            if (syncIo is not null) syncIo.AllowSynchronousIO = true;
+
+            Response.ContentType = "application/zip";
+            Response.Headers.ContentDisposition = $"attachment; filename=\"survey-{id}.zip\"";
+            await _zipBundler.BuildAsync(Response.Body, id, current, ct);
+            return new EmptyResult();
+        }
+
         return fmt switch
         {
             "csv" => File(await _export.GenerateCsvAsync(id, current, ct),
@@ -146,8 +165,6 @@ public sealed class SurveysController : ControllerBase
                 $"survey-{id}.xlsx"),
             "geojson" => File(await _export.GenerateGeoJsonAsync(id, current, ct),
                 "application/geo+json", $"survey-{id}.geojson"),
-            "zip" => File(await _zipBundler.BuildAsync(id, current, ct),
-                "application/zip", $"survey-{id}.zip"),
             _ => BadRequest(new ProblemDetails
             {
                 Status = 400,

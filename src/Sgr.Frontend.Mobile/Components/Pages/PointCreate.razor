@@ -195,7 +195,78 @@
     protected override async Task OnInitializedAsync()
     {
         _fields = await CaptureProfile.ResolveFieldsAsync(SurveyId);
+
+        // DT-camera-state-resume: si veníamos del intent de cámara y el OS mató el proceso,
+        // rehidratamos el state que dejamos guardado antes del intent. Restaurar SÓLO si
+        // matchea el SurveyId actual (evita mezclar capturas si el resume fue de otro relev).
+        var saved = ProcessDeathResume.TryConsumeState<PointCreateResumeState>();
+        if (saved is not null && saved.SurveyId == SurveyId)
+        {
+            _lat = saved.Lat;
+            _lng = saved.Lng;
+            _accuracy = saved.AccuracyM;
+            _lowAccuracy = saved.LowAccuracy;
+            _capturedAt = saved.CapturedAtUtc;
+            _captureMode = saved.CaptureMode ?? _captureMode;
+            if (saved.FieldValues is not null)
+            {
+                foreach (var (k, v) in saved.FieldValues)
+                    _fieldValues[k] = DeserializeRestoredValue(v);
+            }
+            // La foto física puede haber sobrevivido (vive en AppDataDirectory), restauramos
+            // si el archivo todavía está. Si no, perdimos esa foto pero no el resto.
+            if (saved.PhotoLocalPath is not null && File.Exists(saved.PhotoLocalPath))
+            {
+                _photo = new CameraCaptureResult.Ok(
+                    LocalFilePath: saved.PhotoLocalPath,
+                    FileName: saved.PhotoFileName ?? "photo.jpg",
+                    MimeType: saved.PhotoMimeType ?? "image/jpeg",
+                    SizeBytes: saved.PhotoSizeBytes ?? 0,
+                    CapturedAtUtc: saved.PhotoCapturedAtUtc ?? DateTime.UtcNow);
+            }
+            Snackbar.Add("Se restauró la captura previa al cierre inesperado.", Severity.Info);
+        }
     }
+
+    /// <summary>
+    /// Convierte un valor JSON almacenado a la representación in-memory que usan los inputs.
+    /// JSON deserializa a JsonElement; lo desboxamos a string/decimal/bool/DateTime.
+    /// </summary>
+    private static object? DeserializeRestoredValue(object? raw)
+    {
+        if (raw is null) return null;
+        if (raw is System.Text.Json.JsonElement el)
+        {
+            return el.ValueKind switch
+            {
+                System.Text.Json.JsonValueKind.String when DateTime.TryParse(el.GetString(),
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.RoundtripKind, out var dt) => (object)dt,
+                System.Text.Json.JsonValueKind.String => el.GetString()!,
+                System.Text.Json.JsonValueKind.Number => el.GetDecimal(),
+                System.Text.Json.JsonValueKind.True => true,
+                System.Text.Json.JsonValueKind.False => false,
+                _ => null,
+            };
+        }
+        return raw;
+    }
+
+    /// <summary>Snapshot serializado en Preferences antes de tirar el intent de cámara.</summary>
+    private sealed record PointCreateResumeState(
+        Guid SurveyId,
+        decimal? Lat,
+        decimal? Lng,
+        decimal? AccuracyM,
+        bool LowAccuracy,
+        DateTime? CapturedAtUtc,
+        string? CaptureMode,
+        Dictionary<string, object?>? FieldValues,
+        string? PhotoLocalPath,
+        string? PhotoFileName,
+        string? PhotoMimeType,
+        long? PhotoSizeBytes,
+        DateTime? PhotoCapturedAtUtc);
 
     private static string FieldLabel(TemplateField f) =>
         f.Required ? $"{f.Label} *" : f.Label;
@@ -310,8 +381,24 @@
             DiscardPhoto();
 
             // Process-death resume: si Android mata el proceso mientras está la cámara,
-            // queremos volver acá y no a "/". Se limpia abajo en el finally si todo OK.
-            ProcessDeathResume.MarkResumePath($"/surveys/{SurveyId}/points/new");
+            // queremos volver acá Y restaurar el state in-memory. Se limpia abajo en
+            // el finally si todo sale OK (no hubo process-death).
+            ProcessDeathResume.MarkResumePoint(
+                $"/surveys/{SurveyId}/points/new",
+                new PointCreateResumeState(
+                    SurveyId: SurveyId,
+                    Lat: _lat,
+                    Lng: _lng,
+                    AccuracyM: _accuracy,
+                    LowAccuracy: _lowAccuracy,
+                    CapturedAtUtc: _capturedAt,
+                    CaptureMode: _captureMode,
+                    FieldValues: new Dictionary<string, object?>(_fieldValues),
+                    PhotoLocalPath: null,
+                    PhotoFileName: null,
+                    PhotoMimeType: null,
+                    PhotoSizeBytes: null,
+                    PhotoCapturedAtUtc: null));
 
             var photoId = Guid.NewGuid();
             var result = await Camera.CaptureAsync(photoId);

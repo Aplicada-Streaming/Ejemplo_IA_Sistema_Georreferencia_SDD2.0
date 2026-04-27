@@ -7,6 +7,13 @@ using Sgr.Frontend.Web.Components;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Habilitar el manifest de static-web-assets (RCL `_content/<package>/...`) en TODOS los
+// environments. WebApplication.CreateBuilder lo activa automáticamente sólo en Development;
+// sin esto, `_content/MudBlazor/MudBlazor.min.css` & co. devuelven 404 en Production.
+// Combinado con UseStaticFiles más abajo evitamos MapStaticAssets, que en .NET 10 attachea
+// un dev-runtime handler que lee paths físicos en `wwwroot/_content/` (que no existen).
+builder.WebHost.UseStaticWebAssets();
+
 builder.Services.Configure<BackendApiOptions>(
     builder.Configuration.GetSection(BackendApiOptions.SectionName));
 
@@ -48,17 +55,18 @@ if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
 }
 
-// MapStaticAssets sirve wwwroot + `_content/<RCL>/` (MudBlazor.min.css, etc).
-// Va antes de auth para que CSS/JS estén accesibles también desde la página de login.
-app.MapStaticAssets();
+// UseStaticFiles (no MapStaticAssets): trabaja con el manifest cargado por
+// UseStaticWebAssets de arriba y sirve igual wwwroot + `_content/<RCL>/`.
+// Es el path estable, sin dev-runtime handler que rompa en Production.
+// Va antes de auth para que CSS/JS estén accesibles también desde /login.
+app.UseStaticFiles();
 
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();
 
 app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode()
-    .WithStaticAssets();
+    .AddInteractiveServerRenderMode();
 
 app.MapAuthEndpoints();
 
