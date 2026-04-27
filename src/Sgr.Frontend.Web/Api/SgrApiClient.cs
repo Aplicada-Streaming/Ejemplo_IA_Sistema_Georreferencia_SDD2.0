@@ -48,6 +48,16 @@ public interface ISgrApiClient
     Task UpdateTemplateFieldsAsync(Guid versionId, string fieldDefinitionsJson, CancellationToken ct = default);
     Task UpdateTemplateCaptureParamsAsync(Guid versionId, string captureParamsJson, CancellationToken ct = default);
     Task PublishTemplateVersionAsync(Guid versionId, CancellationToken ct = default);
+
+    // Slice 6 / US-13 — gestión jerárquica de usuarios y áreas
+    Task RegisterUserAsync(RegisterUserDto request, CancellationToken ct = default);
+    Task<IReadOnlyList<AreaApiDto>> ListAreasAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<UserApiDto>> ListPendingUsersAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<UserApiDto>> ListUsersAsync(CancellationToken ct = default);
+    Task<UserApiDto> AcceptUserAsync(Guid userId, CancellationToken ct = default);
+    Task<UserApiDto> RejectUserAsync(Guid userId, CancellationToken ct = default);
+    Task<UserApiDto> DisableUserAsync(Guid userId, CancellationToken ct = default);
+    Task<UserApiDto> EnableUserAsync(Guid userId, CancellationToken ct = default);
 }
 
 public sealed class SgrApiClient : ISgrApiClient
@@ -304,6 +314,73 @@ public sealed class SgrApiClient : ISgrApiClient
             ?? Array.Empty<PointFieldValueDto>();
     }
 
+    // ───────── Slice 6 / US-13 — usuarios + áreas ─────────
+
+    public async Task RegisterUserAsync(RegisterUserDto requestDto, CancellationToken ct = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/auth/register")
+        {
+            Content = JsonContent.Create(requestDto),
+        };
+        // Sin AttachAuth — endpoint anónimo.
+        using var response = await _http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+            throw await BuildApiExceptionAsync(response, "No pude registrar al usuario.", ct);
+    }
+
+    public async Task<IReadOnlyList<AreaApiDto>> ListAreasAsync(CancellationToken ct = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/areas");
+        // Endpoint anónimo (lo usa el form de registro), pero AttachAuth si hay token no estorba.
+        AttachAuth(request);
+
+        using var response = await _http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+            throw await BuildApiExceptionAsync(response, "No pude listar las áreas.", ct);
+        return await response.Content.ReadFromJsonAsync<IReadOnlyList<AreaApiDto>>(cancellationToken: ct)
+            ?? Array.Empty<AreaApiDto>();
+    }
+
+    public Task<IReadOnlyList<UserApiDto>> ListPendingUsersAsync(CancellationToken ct = default) =>
+        GetUsersAsync("/api/v1/users/pending", ct);
+
+    public Task<IReadOnlyList<UserApiDto>> ListUsersAsync(CancellationToken ct = default) =>
+        GetUsersAsync("/api/v1/users", ct);
+
+    public Task<UserApiDto> AcceptUserAsync(Guid userId, CancellationToken ct = default) =>
+        PostUserActionAsync($"/api/v1/users/{userId}/accept", "aceptar", ct);
+
+    public Task<UserApiDto> RejectUserAsync(Guid userId, CancellationToken ct = default) =>
+        PostUserActionAsync($"/api/v1/users/{userId}/reject", "rechazar", ct);
+
+    public Task<UserApiDto> DisableUserAsync(Guid userId, CancellationToken ct = default) =>
+        PostUserActionAsync($"/api/v1/users/{userId}/disable", "inhabilitar", ct);
+
+    public Task<UserApiDto> EnableUserAsync(Guid userId, CancellationToken ct = default) =>
+        PostUserActionAsync($"/api/v1/users/{userId}/enable", "rehabilitar", ct);
+
+    private async Task<IReadOnlyList<UserApiDto>> GetUsersAsync(string url, CancellationToken ct)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        AttachAuth(request);
+        using var response = await _http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+            throw await BuildApiExceptionAsync(response, "No pude listar los usuarios.", ct);
+        return await response.Content.ReadFromJsonAsync<IReadOnlyList<UserApiDto>>(cancellationToken: ct)
+            ?? Array.Empty<UserApiDto>();
+    }
+
+    private async Task<UserApiDto> PostUserActionAsync(string url, string verb, CancellationToken ct)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, url);
+        AttachAuth(request);
+        using var response = await _http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+            throw await BuildApiExceptionAsync(response, $"No pude {verb} al usuario.", ct);
+        return await response.Content.ReadFromJsonAsync<UserApiDto>(cancellationToken: ct)
+            ?? throw new InvalidOperationException("Respuesta vacía.");
+    }
+
     private async Task<SgrApiException> BuildApiExceptionAsync(HttpResponseMessage response, string defaultMsg, CancellationToken ct)
     {
         var problem = await ReadProblemDetailsAsync(response, ct);
@@ -473,3 +550,24 @@ public sealed record RecentSurveyDto(
     string Name,
     string Status,
     DateTime UpdatedAt);
+
+// ───────── Slice 6 / US-13 ─────────
+
+public sealed record AreaApiDto(Guid Id, string Name, string? Description);
+
+public sealed record UserApiDto(
+    Guid Id,
+    string Email,
+    string FullName,
+    string Role,
+    string Status,
+    Guid? AreaId,
+    DateTime? AcceptedAt,
+    DateTime CreatedAt);
+
+public sealed record RegisterUserDto(
+    string Email,
+    string Password,
+    string FullName,
+    string Role,
+    Guid? AreaId);

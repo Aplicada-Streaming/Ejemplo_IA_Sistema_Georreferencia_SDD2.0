@@ -11,14 +11,21 @@ namespace Sgr.Backend.Api.Controllers;
 public sealed class SyncController : ControllerBase
 {
     private readonly IEventApplier _applier;
+    private readonly IPointAccessChecker _accessChecker;
 
-    public SyncController(IEventApplier applier) => _applier = applier;
+    public SyncController(IEventApplier applier, IPointAccessChecker accessChecker)
+    {
+        _applier = applier;
+        _accessChecker = accessChecker;
+    }
 
     /// <summary>
-    /// Push de eventos al backend (US-04).
+    /// Push de eventos al backend (US-04 + US-14).
     /// Idempotente por <c>event_id</c> (RN-06).
     /// Resuelve LWW por campo + precedencia del dueño (RN-07).
     /// Rechaza capturas posteriores al cierre del survey (RN-08).
+    /// **Antes** del applier corre <see cref="IPointAccessChecker"/> (RN-01 / US-14):
+    /// los eventos sin permiso devuelven <c>SyncOutcome.RejectedForbidden</c>; el resto pasa.
     /// </summary>
     [HttpPost("push")]
     [ProducesResponseType(typeof(SyncPushResponse), StatusCodes.Status200OK)]
@@ -35,8 +42,21 @@ public sealed class SyncController : ControllerBase
                 Detail = "events array is required and must contain at least one event.",
             });
 
-        var response = await _applier.ApplyAsync(body.Events, ct);
-        return Ok(response);
+        var actor = CurrentUserAccessor.FromPrincipal(User);
+        var access = await _accessChecker.CheckAsync(body.Events, actor, ct);
+
+        var applied = await _applier.ApplyAsync(access.Allowed, ct);
+
+        // Mergeamos rechazos (forbidden) al response. Mantenemos la cuenta total fiel a lo recibido.
+        if (access.Rejected.Count == 0)
+            return Ok(applied);
+
+        var combinedResults = applied.Results.Concat(access.Rejected).ToList();
+        return Ok(new SyncPushResponse(
+            Received: applied.Received + access.Rejected.Count,
+            Applied: applied.Applied,
+            Skipped: applied.Skipped + access.Rejected.Count,
+            Results: combinedResults));
     }
 }
 

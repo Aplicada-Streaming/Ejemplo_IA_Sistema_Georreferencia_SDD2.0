@@ -20,6 +20,7 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
         var (status, title, detail) = exception switch
         {
             LoginException ex => MapLoginError(ex),
+            UserManagementException ex => MapUserManagementError(ex),
             SurveyException ex => MapSurveyError(ex),
             TemplateNotFoundException ex => (StatusCodes.Status404NotFound, "Not Found", ex.Message),
             ArgumentException ex => (StatusCodes.Status400BadRequest, "Bad Request", ex.Message),
@@ -46,6 +47,8 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
             problem.Extensions["errorCode"] = le.ErrorCode.ToString();
         else if (exception is SurveyException se)
             problem.Extensions["errorCode"] = se.Code.ToString();
+        else if (exception is UserManagementException ume)
+            problem.Extensions["errorCode"] = ume.Code.ToString();
 
         httpContext.Response.StatusCode = status;
         httpContext.Response.ContentType = "application/problem+json";
@@ -66,6 +69,24 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
                 (StatusCodes.Status403Forbidden, "Forbidden", ex.Message),
             LoginErrorCode.MobileForbiddenForRole =>
                 (StatusCodes.Status403Forbidden, "Forbidden", ex.Message),
+            _ => (StatusCodes.Status400BadRequest, "Bad Request", ex.Message),
+        };
+
+    private static (int status, string title, string detail) MapUserManagementError(UserManagementException ex) =>
+        ex.Code switch
+        {
+            UserManagementErrorCode.InvalidInput =>
+                (StatusCodes.Status400BadRequest, "Bad Request", ex.Message),
+            UserManagementErrorCode.EmailTaken =>
+                (StatusCodes.Status409Conflict, "Conflict", ex.Message),
+            UserManagementErrorCode.AreaNotFound =>
+                (StatusCodes.Status400BadRequest, "Bad Request", ex.Message),
+            UserManagementErrorCode.UserNotFound =>
+                (StatusCodes.Status404NotFound, "Not Found", ex.Message),
+            UserManagementErrorCode.Forbidden =>
+                (StatusCodes.Status403Forbidden, "Forbidden", ex.Message),
+            UserManagementErrorCode.InvalidStateTransition =>
+                (StatusCodes.Status409Conflict, "Conflict", ex.Message),
             _ => (StatusCodes.Status400BadRequest, "Bad Request", ex.Message),
         };
 

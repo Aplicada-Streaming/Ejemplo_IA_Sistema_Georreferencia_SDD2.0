@@ -1,0 +1,126 @@
+@page "/users/pending"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = "admin_raiz,jefe_area")]
+@inject ISgrApiClient Api
+@inject ISnackbar Snackbar
+
+<PageTitle>SGR — Solicitudes pendientes</PageTitle>
+
+<MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudText Typo="Typo.h4">Solicitudes pendientes</MudText>
+    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.People"
+               Href="/users">
+        Ver todos
+    </MudButton>
+</MudStack>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+}
+else if (_error is not null)
+{
+    <MudAlert Severity="Severity.Error">@_error</MudAlert>
+}
+else if (_users.Count == 0)
+{
+    <MudAlert Severity="Severity.Info" Icon="@Icons.Material.Filled.Inbox">
+        No hay solicitudes pendientes.
+    </MudAlert>
+}
+else
+{
+    <MudTable Items="_users" Hover="true" Bordered="false" Striped="true" Dense="true">
+        <HeaderContent>
+            <MudTh>Email</MudTh>
+            <MudTh>Nombre</MudTh>
+            <MudTh>Rol</MudTh>
+            <MudTh>Solicitado</MudTh>
+            <MudTh Style="width:280px;">Acciones</MudTh>
+        </HeaderContent>
+        <RowTemplate Context="user">
+            <MudTd>@user.Email</MudTd>
+            <MudTd>@user.FullName</MudTd>
+            <MudTd>
+                <MudChip T="string" Size="Size.Small" Color="@RoleColor(user.Role)">
+                    @RoleLabel(user.Role)
+                </MudChip>
+            </MudTd>
+            <MudTd>@user.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudTd>
+            <MudTd>
+                <MudStack Row Spacing="1">
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
+                               StartIcon="@Icons.Material.Filled.Check"
+                               OnClick="@(() => AcceptAsync(user))" Disabled="@_busyId.HasValue">
+                        Aceptar
+                    </MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error"
+                               StartIcon="@Icons.Material.Filled.Close"
+                               OnClick="@(() => RejectAsync(user))" Disabled="@_busyId.HasValue">
+                        Rechazar
+                    </MudButton>
+                </MudStack>
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    private bool _loading = true;
+    private string? _error;
+    private List<UserApiDto> _users = new();
+    private Guid? _busyId;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try { _users = (await Api.ListPendingUsersAsync()).ToList(); }
+        catch (Exception ex) { _error = $"No pude cargar las solicitudes: {ex.Message}"; }
+        finally { _loading = false; }
+    }
+
+    private async Task AcceptAsync(UserApiDto user)
+    {
+        _busyId = user.Id;
+        try
+        {
+            await Api.AcceptUserAsync(user.Id);
+            _users.RemoveAll(u => u.Id == user.Id);
+            Snackbar.Add($"{user.Email} aceptado.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"No pude aceptar: {ex.Message}", Severity.Error); }
+        finally { _busyId = null; }
+    }
+
+    private async Task RejectAsync(UserApiDto user)
+    {
+        _busyId = user.Id;
+        try
+        {
+            await Api.RejectUserAsync(user.Id);
+            _users.RemoveAll(u => u.Id == user.Id);
+            Snackbar.Add($"{user.Email} rechazado.", Severity.Info);
+        }
+        catch (Exception ex) { Snackbar.Add($"No pude rechazar: {ex.Message}", Severity.Error); }
+        finally { _busyId = null; }
+    }
+
+    private static string RoleLabel(string role) => role switch
+    {
+        "admin_raiz" => "Admin",
+        "jefe_area" => "Jefe de área",
+        "relevador" => "Relevador",
+        _ => role,
+    };
+
+    private static Color RoleColor(string role) => role switch
+    {
+        "admin_raiz" => Color.Primary,
+        "jefe_area" => Color.Secondary,
+        "relevador" => Color.Info,
+        _ => Color.Default,
+    };
+}

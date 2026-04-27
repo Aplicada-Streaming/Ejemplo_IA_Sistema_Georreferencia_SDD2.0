@@ -15,6 +15,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();
         services.AddSingleton<IJwtTokenService, JwtTokenService>();
         services.AddScoped<ILoginService, LoginService>();
+        services.AddScoped<IUserRegistrationService, UserRegistrationService>();
+        services.AddScoped<IUserManagementService, UserManagementService>();
+        services.AddScoped<IAreaQueryService, AreaQueryService>();
         return services;
     }
 }

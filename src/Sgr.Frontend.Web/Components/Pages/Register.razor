@@ -1,0 +1,111 @@
+@page "/register"
+@layout Sgr.Frontend.Web.Components.Layout.LoginLayout
+@rendermode InteractiveServer
+@attribute [AllowAnonymous]
+@inject ISgrApiClient Api
+@inject NavigationManager Nav
+
+<PageTitle>SGR — Registro</PageTitle>
+
+<MudPaper Elevation="6" Class="pa-8 mx-auto" Style="max-width: 480px; margin-top: 60px;">
+    <MudText Typo="Typo.h5" Align="Align.Center" Class="mb-4">Solicitar acceso</MudText>
+    <MudText Typo="Typo.body2" Align="Align.Center" Class="mb-6 mud-text-secondary">
+        Tu cuenta queda pendiente hasta que un superior la apruebe.
+    </MudText>
+
+    @if (_success)
+    {
+        <MudAlert Severity="Severity.Success" Class="mb-4">
+            Solicitud enviada. Vas a poder iniciar sesión cuando un superior la apruebe.
+        </MudAlert>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                   OnClick="@(() => Nav.NavigateTo("/login"))">
+            Volver al login
+        </MudButton>
+    }
+    else
+    {
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <MudAlert Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+        }
+
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="_email" Label="Correo electrónico" Required="true"
+                          InputType="InputType.Email" Variant="Variant.Outlined" />
+            <MudTextField @bind-Value="_fullName" Label="Nombre completo" Required="true"
+                          Variant="Variant.Outlined" />
+            <MudTextField @bind-Value="_password" Label="Contraseña" Required="true"
+                          InputType="InputType.Password" Variant="Variant.Outlined"
+                          HelperText="Mínimo 8 caracteres." />
+            <MudSelect T="string" @bind-Value="_role" Label="Rol" Required="true" Variant="Variant.Outlined">
+                <MudSelectItem Value="@("relevador")">Relevador</MudSelectItem>
+                <MudSelectItem Value="@("jefe_area")">Jefe de área</MudSelectItem>
+            </MudSelect>
+            <MudSelect T="Guid?" @bind-Value="_areaId" Label="Área" Required="true" Variant="Variant.Outlined">
+                @foreach (var area in _areas)
+                {
+                    <MudSelectItem Value="@((Guid?)area.Id)">@area.Name</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                       OnClick="SubmitAsync" Disabled="@_busy">
+                @(_busy ? "Enviando..." : "Solicitar acceso")
+            </MudButton>
+            <MudButton Variant="Variant.Text" Color="Color.Default" FullWidth="true"
+                       Href="/login">
+                Volver al login
+            </MudButton>
+        </MudStack>
+    }
+</MudPaper>
+
+@code {
+    private string _email = "";
+    private string _fullName = "";
+    private string _password = "";
+    private string _role = "relevador";
+    private Guid? _areaId;
+    private bool _busy;
+    private bool _success;
+    private string? _error;
+    private IReadOnlyList<AreaApiDto> _areas = Array.Empty<AreaApiDto>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { _areas = await Api.ListAreasAsync(); }
+        catch (Exception ex) { _error = $"No pude cargar las áreas: {ex.Message}"; }
+    }
+
+    private async Task SubmitAsync()
+    {
+        _error = null;
+        if (_areaId is null)
+        {
+            _error = "Tenés que seleccionar un área.";
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            await Api.RegisterUserAsync(new RegisterUserDto(
+                Email: _email,
+                Password: _password,
+                FullName: _fullName,
+                Role: _role,
+                AreaId: _areaId));
+            _success = true;
+        }
+        catch (SgrApiException ex)
+        {
+            _error = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            _error = $"Error inesperado: {ex.Message}";
+        }
+        finally { _busy = false; }
+    }
+}

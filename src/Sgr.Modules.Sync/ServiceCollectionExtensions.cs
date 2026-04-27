@@ -9,6 +9,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddScoped<IEventApplier, EventApplier>();
         services.AddScoped<IPullDiffService, PullDiffService>();
+        services.AddScoped<IPointAccessChecker, PointAccessChecker>();
         return services;
     }
 }

@@ -1,0 +1,172 @@
+@page "/users"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = "admin_raiz,jefe_area")]
+@inject ISgrApiClient Api
+@inject ISnackbar Snackbar
+
+<PageTitle>SGR — Usuarios</PageTitle>
+
+<MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudText Typo="Typo.h4">Usuarios</MudText>
+    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.HourglassEmpty"
+               Href="/users/pending">
+        Solicitudes pendientes
+    </MudButton>
+</MudStack>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+}
+else if (_error is not null)
+{
+    <MudAlert Severity="Severity.Error">@_error</MudAlert>
+}
+else if (_users.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">No hay usuarios bajo tu scope.</MudAlert>
+}
+else
+{
+    <MudTable Items="_users" Hover="true" Bordered="false" Striped="true" Dense="true">
+        <HeaderContent>
+            <MudTh>Email</MudTh>
+            <MudTh>Nombre</MudTh>
+            <MudTh>Rol</MudTh>
+            <MudTh>Estado</MudTh>
+            <MudTh>Aceptado</MudTh>
+            <MudTh Style="width:260px;">Acciones</MudTh>
+        </HeaderContent>
+        <RowTemplate Context="user">
+            <MudTd>@user.Email</MudTd>
+            <MudTd>@user.FullName</MudTd>
+            <MudTd>
+                <MudChip T="string" Size="Size.Small" Color="@RoleColor(user.Role)">
+                    @RoleLabel(user.Role)
+                </MudChip>
+            </MudTd>
+            <MudTd>
+                <MudChip T="string" Size="Size.Small" Color="@StatusColor(user.Status)">
+                    @StatusLabel(user.Status)
+                </MudChip>
+            </MudTd>
+            <MudTd>
+                @(user.AcceptedAt is null
+                    ? "—"
+                    : user.AcceptedAt.Value.ToLocalTime().ToString("yyyy-MM-dd"))
+            </MudTd>
+            <MudTd>
+                @if (user.Status == "pendiente_aceptacion")
+                {
+                    <MudStack Row Spacing="1">
+                        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
+                                   OnClick="@(() => AcceptAsync(user))" Disabled="@_busyId.HasValue">
+                            Aceptar
+                        </MudButton>
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error"
+                                   OnClick="@(() => RejectAsync(user))" Disabled="@_busyId.HasValue">
+                            Rechazar
+                        </MudButton>
+                    </MudStack>
+                }
+                else if (user.Status == "activo" && user.Role == "jefe_area")
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning"
+                               StartIcon="@Icons.Material.Filled.Block"
+                               OnClick="@(() => DisableAsync(user))" Disabled="@_busyId.HasValue">
+                        Inhabilitar
+                    </MudButton>
+                }
+                else if (user.Status == "inhabilitado")
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.CheckCircle"
+                               OnClick="@(() => EnableAsync(user))" Disabled="@_busyId.HasValue">
+                        Rehabilitar
+                    </MudButton>
+                }
+                else
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">—</MudText>
+                }
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    private bool _loading = true;
+    private string? _error;
+    private List<UserApiDto> _users = new();
+    private Guid? _busyId;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try { _users = (await Api.ListUsersAsync()).ToList(); }
+        catch (Exception ex) { _error = $"No pude cargar los usuarios: {ex.Message}"; }
+        finally { _loading = false; }
+    }
+
+    private async Task AcceptAsync(UserApiDto user) =>
+        await RunAsync(user, async () => { await Api.AcceptUserAsync(user.Id); }, "aceptado");
+
+    private async Task RejectAsync(UserApiDto user) =>
+        await RunAsync(user, async () => { await Api.RejectUserAsync(user.Id); }, "rechazado");
+
+    private async Task DisableAsync(UserApiDto user) =>
+        await RunAsync(user, async () => { await Api.DisableUserAsync(user.Id); }, "inhabilitado");
+
+    private async Task EnableAsync(UserApiDto user) =>
+        await RunAsync(user, async () => { await Api.EnableUserAsync(user.Id); }, "rehabilitado");
+
+    private async Task RunAsync(UserApiDto user, Func<Task> action, string verb)
+    {
+        _busyId = user.Id;
+        try
+        {
+            await action();
+            Snackbar.Add($"{user.Email} {verb}.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex) { Snackbar.Add($"No pude {verb.TrimEnd('o', 'a')}: {ex.Message}", Severity.Error); }
+        finally { _busyId = null; }
+    }
+
+    private static string RoleLabel(string role) => role switch
+    {
+        "admin_raiz" => "Admin",
+        "jefe_area" => "Jefe de área",
+        "relevador" => "Relevador",
+        _ => role,
+    };
+
+    private static Color RoleColor(string role) => role switch
+    {
+        "admin_raiz" => Color.Primary,
+        "jefe_area" => Color.Secondary,
+        "relevador" => Color.Info,
+        _ => Color.Default,
+    };
+
+    private static string StatusLabel(string status) => status switch
+    {
+        "pendiente_aceptacion" => "Pendiente",
+        "activo" => "Activo",
+        "inhabilitado" => "Inhabilitado",
+        "dado_de_baja" => "Dado de baja",
+        _ => status,
+    };
+
+    private static Color StatusColor(string status) => status switch
+    {
+        "activo" => Color.Success,
+        "pendiente_aceptacion" => Color.Warning,
+        "inhabilitado" => Color.Default,
+        "dado_de_baja" => Color.Error,
+        _ => Color.Default,
+    };
+}

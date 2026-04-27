@@ -34,6 +34,7 @@ public enum SyncOutcome
     RejectedPostClose = 5, // RN-08: el survey está cerrado y este evento es posterior
     RejectedNotFound = 6,  // Entidad referenciada no existe
     RejectedInvalid = 7,   // Validación de payload
+    RejectedForbidden = 8, // RN-01 / US-14: el actor no tiene permiso para mutar el punto
 }
 
 public sealed record SyncPushResponse(
