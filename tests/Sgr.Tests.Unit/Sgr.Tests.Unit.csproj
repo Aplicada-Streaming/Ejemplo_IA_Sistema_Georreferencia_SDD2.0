@@ -13,6 +13,7 @@
     <!-- FluentAssertions queda en 7.x (último MIT). 8.x cambió a licencia comercial. Ver ADR-04. -->
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
     <PackageReference Include="FluentAssertions" Version="7.2.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.13.0" />
     <PackageReference Include="Moq" Version="4.20.72" />
     <PackageReference Include="xunit" Version="2.9.3" />
@@ -30,6 +31,15 @@
     <ProjectReference Include="..\..\src\Sgr.Modules.Templates\Sgr.Modules.Templates.csproj" />
     <ProjectReference Include="..\..\src\Sgr.Modules.Points\Sgr.Modules.Points.csproj" />
     <ProjectReference Include="..\..\src\Sgr.Modules.Storage\Sgr.Modules.Storage.csproj" />
+    <ProjectReference Include="..\..\src\Sgr.Modules.Sync\Sgr.Modules.Sync.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Linkeamos código matemático puro del mobile (sin deps MAUI) para testearlo
+         desde net10.0 plain. Sgr.Frontend.Mobile target net10.0-android no se
+         puede referenciar como ProjectReference desde net10.0. -->
+    <Compile Include="..\..\src\Sgr.Frontend.Mobile\Geolocation\Distance.cs"
+             Link="Mobile\Distance.cs" />
   </ItemGroup>
 
 </Project>

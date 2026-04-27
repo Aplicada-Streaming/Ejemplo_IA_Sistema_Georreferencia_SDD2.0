@@ -59,4 +59,55 @@ public class TemplateVersionTests
         t.IsDeletable.Should().BeTrue();
         t.ParentTemplateId.Should().Be(parent);
     }
+
+    // ───── E.5.c: Update fields/captureParams ─────
+
+    [Fact]
+    public void UpdateFieldDefinitions_works_in_borrador()
+    {
+        var v = TemplateVersion.CreateDraft(Guid.NewGuid(), Guid.NewGuid(), 1, "[]", "{}", _now);
+
+        v.UpdateFieldDefinitions("[{\"key\":\"k\"}]");
+
+        v.FieldDefinitionsJson.Should().Be("[{\"key\":\"k\"}]");
+    }
+
+    [Fact]
+    public void UpdateFieldDefinitions_throws_when_publicada_RN_05()
+    {
+        var v = TemplateVersion.CreateDraft(Guid.NewGuid(), Guid.NewGuid(), 1, "[]", "{}", _now);
+        v.Publish(_now);
+
+        var act = () => v.UpdateFieldDefinitions("[]");
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*borrador*");
+    }
+
+    [Fact]
+    public void UpdateFieldDefinitions_throws_on_empty_json()
+    {
+        var v = TemplateVersion.CreateDraft(Guid.NewGuid(), Guid.NewGuid(), 1, "[]", "{}", _now);
+        var act = () => v.UpdateFieldDefinitions("");
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void UpdateCaptureParams_works_in_borrador()
+    {
+        var v = TemplateVersion.CreateDraft(Guid.NewGuid(), Guid.NewGuid(), 1, "[]", "{}", _now);
+        v.UpdateCaptureParams("{\"x\":1}");
+        v.CaptureParamsJson.Should().Be("{\"x\":1}");
+    }
+
+    [Fact]
+    public void UpdateCaptureParams_throws_when_publicada_RN_05()
+    {
+        var v = TemplateVersion.CreateDraft(Guid.NewGuid(), Guid.NewGuid(), 1, "[]", "{}", _now);
+        v.Publish(_now);
+
+        var act = () => v.UpdateCaptureParams("{}");
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*borrador*");
+    }
 }
