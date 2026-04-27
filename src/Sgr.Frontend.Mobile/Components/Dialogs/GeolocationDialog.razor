@@ -1,0 +1,226 @@
+@using Sgr.Frontend.Mobile.Geolocation
+@inject IGeolocationService Geo
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudPaper Class="pa-4" Elevation="0" Style="min-width: 320px;">
+
+            @switch (_progress)
+            {
+                case GeolocationProgress.CheckingPermissions:
+                    <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+                        <MudText Typo="Typo.body1">Verificando permisos…</MudText>
+                    </MudStack>
+                    break;
+
+                case GeolocationProgress.AcquiringFix:
+                    <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.MyLocation" Size="Size.Large" Color="Color.Primary" />
+                        <MudText Typo="Typo.body1">Obteniendo posición GPS…</MudText>
+                        <MudText Typo="Typo.h5" Color="Color.Primary">@_elapsedLabel</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            Timeout: @Parameters.TimeoutSeconds s
+                        </MudText>
+                    </MudStack>
+                    break;
+
+                default:
+                    @* Estado terminal: mostrar resultado *@
+                    @switch (_result)
+                    {
+                        case GeolocationResult.Ok ok:
+                            <MudAlert Severity="Severity.Success" Icon="@Icons.Material.Filled.CheckCircle">
+                                Posición obtenida con precisión <strong>±@FormatAcc(ok.AccuracyMeters)</strong>.
+                            </MudAlert>
+                            <MudText Typo="Typo.body2" Class="mt-2 mud-text-secondary">
+                                lat <code>@ok.Latitude.ToString("F6")</code> · lng <code>@ok.Longitude.ToString("F6")</code>
+                            </MudText>
+                            break;
+
+                        case GeolocationResult.LowAccuracy low:
+                            <MudAlert Severity="Severity.Warning" Icon="@Icons.Material.Filled.Warning">
+                                Precisión baja: <strong>±@FormatAcc(low.AccuracyMeters)</strong>
+                                (threshold @FormatAcc(low.ThresholdMeters)).
+                            </MudAlert>
+                            <MudText Typo="Typo.body2" Class="mt-2 mud-text-secondary">
+                                lat <code>@low.Latitude.ToString("F6")</code> · lng <code>@low.Longitude.ToString("F6")</code>
+                            </MudText>
+                            <MudText Typo="Typo.caption" Class="mt-2 mud-text-secondary">
+                                Podés reintentar para mejor precisión, o continuar con este valor.
+                            </MudText>
+                            break;
+
+                        case GeolocationResult.Timeout t:
+                            <MudAlert Severity="Severity.Error" Icon="@Icons.Material.Filled.Schedule">
+                                No pudimos obtener la posición en @t.TimeoutSeconds segundos.
+                            </MudAlert>
+                            <MudText Typo="Typo.caption" Class="mt-2 mud-text-secondary">
+                                Probá moverte unos metros (ventana, exterior) y reintentar.
+                            </MudText>
+                            break;
+
+                        case GeolocationResult.NoSignal:
+                            <MudAlert Severity="Severity.Error" Icon="@Icons.Material.Filled.LocationDisabled">
+                                La ubicación está desactivada en el dispositivo.
+                            </MudAlert>
+                            <MudText Typo="Typo.caption" Class="mt-2 mud-text-secondary">
+                                Activá la ubicación en los ajustes del sistema y reintentá.
+                            </MudText>
+                            break;
+
+                        case GeolocationResult.PermissionDenied pd:
+                            <MudAlert Severity="Severity.Error" Icon="@Icons.Material.Filled.Block">
+                                @(pd.IsPermanent
+                                    ? "El permiso de ubicación está bloqueado. Hay que habilitarlo en los ajustes del sistema."
+                                    : "Necesitamos permiso de ubicación para georreferenciar las fotos.")
+                            </MudAlert>
+                            break;
+
+                        case GeolocationResult.Error err:
+                            <MudAlert Severity="Severity.Error" Icon="@Icons.Material.Filled.ErrorOutline">
+                                Error: @err.Message
+                            </MudAlert>
+                            break;
+                    }
+                    break;
+            }
+        </MudPaper>
+    </DialogContent>
+
+    <DialogActions>
+        @{
+            var canRetry = _result is GeolocationResult.LowAccuracy
+                or GeolocationResult.Timeout
+                or GeolocationResult.NoSignal
+                or GeolocationResult.Error
+                or GeolocationResult.PermissionDenied { IsPermanent: false };
+            var canOpenSettings = _result is GeolocationResult.PermissionDenied { IsPermanent: true }
+                or GeolocationResult.NoSignal;
+            var canAccept = _result is GeolocationResult.Ok
+                || (_result is GeolocationResult.LowAccuracy && Parameters.AllowContinueWithLowAccuracy);
+            var inFlight = _progress != GeolocationProgress.Idle;
+        }
+
+        <MudButton OnClick="Cancel" Disabled="false" Color="Color.Default">
+            Cancelar
+        </MudButton>
+
+        @if (canOpenSettings)
+        {
+            <MudButton OnClick="OpenSettings" Color="Color.Warning" Variant="Variant.Outlined">
+                Abrir ajustes
+            </MudButton>
+        }
+
+        @if (canRetry && !inFlight)
+        {
+            <MudButton OnClick="Retry" Color="Color.Primary" Variant="Variant.Outlined"
+                       StartIcon="@Icons.Material.Filled.Refresh">
+                Reintentar
+            </MudButton>
+        }
+
+        @if (canAccept && !inFlight)
+        {
+            <MudButton OnClick="Accept" Color="Color.Primary" Variant="Variant.Filled"
+                       StartIcon="@Icons.Material.Filled.Check">
+                @(_result is GeolocationResult.LowAccuracy ? "Continuar igual" : "Usar")
+            </MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+    [Parameter] public GeolocationParams Parameters { get; set; } = new();
+
+    private GeolocationProgress _progress = GeolocationProgress.Idle;
+    private GeolocationResult? _result;
+    private string _elapsedLabel = "0:00";
+    private CancellationTokenSource? _cts;
+    private System.Threading.Timer? _tickTimer;
+    private DateTime _startedAt;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await StartCaptureAsync();
+    }
+
+    private async Task StartCaptureAsync()
+    {
+        _result = null;
+        _progress = GeolocationProgress.CheckingPermissions;
+        _elapsedLabel = "0:00";
+        _startedAt = DateTime.UtcNow;
+        StartTickTimer();
+
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        var progress = new Progress<GeolocationProgress>(p =>
+            InvokeAsync(() => { _progress = p; StateHasChanged(); }));
+
+        try
+        {
+            _result = await Geo.AcquireAsync(Parameters, progress, _cts.Token);
+        }
+        catch (Exception ex)
+        {
+            _result = new GeolocationResult.Error(ex.Message);
+        }
+        finally
+        {
+            _progress = GeolocationProgress.Idle;
+            StopTickTimer();
+            StateHasChanged();
+        }
+    }
+
+    private void StartTickTimer()
+    {
+        _tickTimer?.Dispose();
+        _tickTimer = new System.Threading.Timer(_ =>
+        {
+            var elapsed = DateTime.UtcNow - _startedAt;
+            _elapsedLabel = $"{(int)elapsed.TotalMinutes}:{elapsed.Seconds:D2}";
+            InvokeAsync(StateHasChanged);
+        }, null, TimeSpan.FromMilliseconds(500), TimeSpan.FromMilliseconds(500));
+    }
+
+    private void StopTickTimer()
+    {
+        _tickTimer?.Dispose();
+        _tickTimer = null;
+    }
+
+    private async Task Retry() => await StartCaptureAsync();
+
+    private void OpenSettings()
+    {
+        Geo.OpenSystemSettings();
+        Snackbar.Add("Habilitá el permiso/GPS y volvé a la app.", Severity.Info);
+    }
+
+    private void Accept()
+    {
+        Dialog.Close(DialogResult.Ok(_result!));
+    }
+
+    private void Cancel()
+    {
+        _cts?.Cancel();
+        StopTickTimer();
+        Dialog.Cancel();
+    }
+
+    private static string FormatAcc(decimal m) =>
+        m < 10m ? $"{m:F1} m" : $"{m:F0} m";
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        StopTickTimer();
+    }
+}

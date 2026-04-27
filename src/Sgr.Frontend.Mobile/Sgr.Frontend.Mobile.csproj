@@ -42,6 +42,17 @@
         <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'tizen'">6.5</SupportedOSPlatformVersion>
     </PropertyGroup>
 
+    <!--
+        Embed assemblies inside the APK in Debug too.
+        Default Debug uses Fast Deployment which pushes assemblies via `dotnet build -t:Install`.
+        That path doesn't survive a plain `adb install` of the signed APK (dispositivo crashea con
+        "No assemblies found ... Fast Deployment"). Embedding makes the APK self-contained
+        a costo de un build más lento (~92MB en lugar de ~13MB).
+    -->
+    <PropertyGroup Condition="'$(Configuration)' == 'Debug' AND $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+        <EmbedAssembliesIntoApk>true</EmbedAssembliesIntoApk>
+    </PropertyGroup>
+
     <ItemGroup>
         <!-- App Icon -->
         <MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#512BD4" />

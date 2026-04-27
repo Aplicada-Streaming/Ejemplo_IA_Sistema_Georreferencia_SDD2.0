@@ -2,78 +2,147 @@
 @attribute [Authorize]
 @inject IOutboxEnqueueService Enqueue
 @inject IOutboxDrainer Drainer
+@inject IDialogService Dialogs
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
 
 <PageTitle>SGR · Capturar punto</PageTitle>
 
-<MudText Typo="Typo.h5" Class="mb-3">Nuevo punto (offline)</MudText>
+<MudText Typo="Typo.h5" Class="mb-3">Nuevo punto</MudText>
 
 <MudPaper Class="pa-4" Elevation="2">
-    <MudAlert Severity="Severity.Info" Class="mb-3" Icon="@Icons.Material.Filled.WifiOff">
-        Slice 1: punto vacío sin foto. La captura completa con GPS + foto llega en US-06.
-        Por ahora, ingresá lat/lng manuales — se encola en el outbox local y el drainer
-        lo envía cuando haya conexión.
+    <MudAlert Severity="Severity.Info" Class="mb-3" Icon="@Icons.Material.Filled.GpsFixed">
+        Slice 3.1: captura GPS sin foto. La cámara y el modo móvil con radio llegan en 3.3 / 3.5.
     </MudAlert>
 
-    <MudForm @ref="_form" @bind-IsValid="_isValid">
-        <MudNumericField T="decimal" @bind-Value="_lat" Label="Latitud" Min="-90m" Max="90m"
-                         Step="0.000001m" Format="F6" Variant="Variant.Outlined"
-                         HelperText="Ej.: -34.6037 (Buenos Aires)" Required="true"
-                         RequiredError="Latitud requerida." />
+    @if (_lat is null || _lng is null)
+    {
+        <MudPaper Class="pa-4 mb-3" Elevation="0" Style="text-align:center; background: var(--mud-palette-background-grey);">
+            <MudIcon Icon="@Icons.Material.Filled.LocationSearching"
+                     Size="Size.Large" Color="Color.Default" />
+            <MudText Typo="Typo.body1" Class="mt-2 mud-text-secondary">
+                Aún no obtuviste la ubicación.
+            </MudText>
+        </MudPaper>
+    }
+    else
+    {
+        <MudPaper Class="pa-4 mb-3" Elevation="0" Style="background: var(--mud-palette-success-lighten);">
+            <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Filled.MyLocation" Color="Color.Success" />
+                <div>
+                    <MudText Typo="Typo.body1">
+                        <strong>lat</strong> @_lat.Value.ToString("F6") ·
+                        <strong>lng</strong> @_lng.Value.ToString("F6")
+                    </MudText>
+                    @if (_accuracy is not null)
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            Precisión: ±@_accuracy.Value.ToString("F1") m
+                            @if (_lowAccuracy)
+                            {
+                                <span style="color: var(--mud-palette-warning);"> (baja)</span>
+                            }
+                        </MudText>
+                    }
+                </div>
+            </MudStack>
+        </MudPaper>
+    }
 
-        <MudNumericField T="decimal" @bind-Value="_lng" Label="Longitud" Min="-180m" Max="180m"
-                         Step="0.000001m" Format="F6" Variant="Variant.Outlined" Class="mt-3"
-                         HelperText="Ej.: -58.3816" Required="true"
-                         RequiredError="Longitud requerida." />
+    <MudButton Variant="@(_lat is null ? Variant.Filled : Variant.Outlined)"
+               Color="Color.Primary" FullWidth="true"
+               StartIcon="@Icons.Material.Filled.GpsFixed"
+               OnClick="OpenGpsDialogAsync"
+               Disabled="_saving">
+        @(_lat is null ? "Obtener GPS" : "Reintentar GPS")
+    </MudButton>
 
-        <MudNumericField T="decimal?" @bind-Value="_accuracy" Label="Precisión (m, opcional)"
-                         Min="0m" Max="9999m" Step="0.5m" Format="F2"
-                         Variant="Variant.Outlined" Class="mt-3" />
+    <MudSelect T="string" @bind-Value="_captureMode" Label="Modo de captura"
+               Variant="Variant.Outlined" Class="mt-3" Disabled="_saving">
+        <MudSelectItem Value="@("detenido")">Detenido</MudSelectItem>
+        <MudSelectItem Value="@("movil")">Móvil</MudSelectItem>
+    </MudSelect>
 
-        <MudSelect T="string" @bind-Value="_captureMode" Label="Modo de captura"
-                   Variant="Variant.Outlined" Class="mt-3">
-            <MudSelectItem Value="@("detenido")">Detenido</MudSelectItem>
-            <MudSelectItem Value="@("movil")">Móvil</MudSelectItem>
-        </MudSelect>
+    @if (_error is not null)
+    {
+        <MudAlert Severity="Severity.Error" Class="mt-3">@_error</MudAlert>
+    }
 
-        @if (_error is not null)
-        {
-            <MudAlert Severity="Severity.Error" Class="mt-3">@_error</MudAlert>
-        }
+    <MudButton Variant="Variant.Filled" Color="Color.Success" FullWidth="true" Class="mt-4"
+               StartIcon="@Icons.Material.Filled.Save"
+               Disabled="@(_lat is null || _lng is null || _saving)" OnClick="SubmitAsync">
+        @(_saving ? "Encolando..." : "Encolar en outbox")
+    </MudButton>
 
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Class="mt-4"
-                   StartIcon="@Icons.Material.Filled.Save"
-                   Disabled="@(_saving || !_isValid)" OnClick="SubmitAsync">
-            @(_saving ? "Encolando..." : "Encolar en outbox")
-        </MudButton>
-
-        <MudButton Variant="Variant.Outlined" Color="Color.Default" FullWidth="true" Class="mt-2"
-                   Href="@($"/surveys/{SurveyId}/points/new")" Disabled="_saving"
-                   OnClick="ResetForm">
-            Limpiar (otro punto)
-        </MudButton>
-    </MudForm>
+    <MudButton Variant="Variant.Text" Color="Color.Default" FullWidth="true" Class="mt-2"
+               OnClick="ResetAndContinue" Disabled="_saving">
+        Limpiar (otro punto)
+    </MudButton>
 </MudPaper>
 
 @code {
     [Parameter] public Guid SurveyId { get; set; }
 
-    private MudForm? _form;
-    private bool _isValid;
     private bool _saving;
     private string? _error;
 
-    private decimal _lat = -34.6037m;
-    private decimal _lng = -58.3816m;
+    private decimal? _lat;
+    private decimal? _lng;
     private decimal? _accuracy;
+    private bool _lowAccuracy;
+    private DateTime? _capturedAt;
+
     private string _captureMode = "detenido";
+
+    private async Task OpenGpsDialogAsync()
+    {
+        _error = null;
+        var options = new DialogOptions
+        {
+            CloseOnEscapeKey = false,
+            BackdropClick = false,
+            FullWidth = true,
+            MaxWidth = MaxWidth.Small,
+        };
+
+        var dialogParams = new DialogParameters
+        {
+            ["Parameters"] = new GeolocationParams(
+                TimeoutSeconds: 30,
+                AccuracyThresholdMeters: 50.0,
+                AllowContinueWithLowAccuracy: true,
+                AllowManualEntry: false),
+        };
+
+        var dialog = await Dialogs.ShowAsync<Sgr.Frontend.Mobile.Components.Dialogs.GeolocationDialog>(
+            "Capturar GPS", dialogParams, options);
+        var result = await dialog.Result;
+
+        if (result is null || result.Canceled || result.Data is null) return;
+
+        switch (result.Data)
+        {
+            case GeolocationResult.Ok ok:
+                _lat = ok.Latitude;
+                _lng = ok.Longitude;
+                _accuracy = ok.AccuracyMeters;
+                _capturedAt = ok.CapturedAtUtc;
+                _lowAccuracy = false;
+                break;
+            case GeolocationResult.LowAccuracy low:
+                _lat = low.Latitude;
+                _lng = low.Longitude;
+                _accuracy = low.AccuracyMeters;
+                _capturedAt = low.CapturedAtUtc;
+                _lowAccuracy = true;
+                break;
+        }
+    }
 
     private async Task SubmitAsync()
     {
-        if (_form is null) return;
-        await _form.Validate();
-        if (!_isValid) return;
+        if (_lat is null || _lng is null) return;
 
         _saving = true;
         _error = null;
@@ -83,19 +152,17 @@
             var opId = await Enqueue.EnqueuePointCreatedAsync(
                 surveyId: SurveyId,
                 pointId: pointId,
-                latitude: _lat,
-                longitude: _lng,
+                latitude: _lat.Value,
+                longitude: _lng.Value,
                 accuracyM: _accuracy,
                 captureMode: _captureMode,
-                timestamp: DateTime.UtcNow);
+                timestamp: _capturedAt ?? DateTime.UtcNow);
 
             Snackbar.Add($"Punto encolado (op {opId[..8]}…). Se envía cuando haya conexión.",
                 Severity.Success);
 
-            // Trigger un drain inmediato (oportunista; si hay red, llega ya).
             _ = Drainer.DrainOnceAsync();
-
-            ResetForm();
+            ResetAndContinue();
         }
         catch (Exception ex)
         {
@@ -107,11 +174,13 @@
         }
     }
 
-    private void ResetForm()
+    private void ResetAndContinue()
     {
-        _lat = -34.6037m;
-        _lng = -58.3816m;
+        _lat = null;
+        _lng = null;
         _accuracy = null;
+        _lowAccuracy = false;
+        _capturedAt = null;
         _captureMode = "detenido";
         _error = null;
     }
