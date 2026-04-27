@@ -1,0 +1,118 @@
+@page "/surveys/{SurveyId:guid}/points/new"
+@attribute [Authorize]
+@inject IOutboxEnqueueService Enqueue
+@inject IOutboxDrainer Drainer
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>SGR · Capturar punto</PageTitle>
+
+<MudText Typo="Typo.h5" Class="mb-3">Nuevo punto (offline)</MudText>
+
+<MudPaper Class="pa-4" Elevation="2">
+    <MudAlert Severity="Severity.Info" Class="mb-3" Icon="@Icons.Material.Filled.WifiOff">
+        Slice 1: punto vacío sin foto. La captura completa con GPS + foto llega en US-06.
+        Por ahora, ingresá lat/lng manuales — se encola en el outbox local y el drainer
+        lo envía cuando haya conexión.
+    </MudAlert>
+
+    <MudForm @ref="_form" @bind-IsValid="_isValid">
+        <MudNumericField T="decimal" @bind-Value="_lat" Label="Latitud" Min="-90m" Max="90m"
+                         Step="0.000001m" Format="F6" Variant="Variant.Outlined"
+                         HelperText="Ej.: -34.6037 (Buenos Aires)" Required="true"
+                         RequiredError="Latitud requerida." />
+
+        <MudNumericField T="decimal" @bind-Value="_lng" Label="Longitud" Min="-180m" Max="180m"
+                         Step="0.000001m" Format="F6" Variant="Variant.Outlined" Class="mt-3"
+                         HelperText="Ej.: -58.3816" Required="true"
+                         RequiredError="Longitud requerida." />
+
+        <MudNumericField T="decimal?" @bind-Value="_accuracy" Label="Precisión (m, opcional)"
+                         Min="0m" Max="9999m" Step="0.5m" Format="F2"
+                         Variant="Variant.Outlined" Class="mt-3" />
+
+        <MudSelect T="string" @bind-Value="_captureMode" Label="Modo de captura"
+                   Variant="Variant.Outlined" Class="mt-3">
+            <MudSelectItem Value="@("detenido")">Detenido</MudSelectItem>
+            <MudSelectItem Value="@("movil")">Móvil</MudSelectItem>
+        </MudSelect>
+
+        @if (_error is not null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-3">@_error</MudAlert>
+        }
+
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Class="mt-4"
+                   StartIcon="@Icons.Material.Filled.Save"
+                   Disabled="@(_saving || !_isValid)" OnClick="SubmitAsync">
+            @(_saving ? "Encolando..." : "Encolar en outbox")
+        </MudButton>
+
+        <MudButton Variant="Variant.Outlined" Color="Color.Default" FullWidth="true" Class="mt-2"
+                   Href="@($"/surveys/{SurveyId}/points/new")" Disabled="_saving"
+                   OnClick="ResetForm">
+            Limpiar (otro punto)
+        </MudButton>
+    </MudForm>
+</MudPaper>
+
+@code {
+    [Parameter] public Guid SurveyId { get; set; }
+
+    private MudForm? _form;
+    private bool _isValid;
+    private bool _saving;
+    private string? _error;
+
+    private decimal _lat = -34.6037m;
+    private decimal _lng = -58.3816m;
+    private decimal? _accuracy;
+    private string _captureMode = "detenido";
+
+    private async Task SubmitAsync()
+    {
+        if (_form is null) return;
+        await _form.Validate();
+        if (!_isValid) return;
+
+        _saving = true;
+        _error = null;
+        try
+        {
+            var pointId = Guid.NewGuid();
+            var opId = await Enqueue.EnqueuePointCreatedAsync(
+                surveyId: SurveyId,
+                pointId: pointId,
+                latitude: _lat,
+                longitude: _lng,
+                accuracyM: _accuracy,
+                captureMode: _captureMode,
+                timestamp: DateTime.UtcNow);
+
+            Snackbar.Add($"Punto encolado (op {opId[..8]}…). Se envía cuando haya conexión.",
+                Severity.Success);
+
+            // Trigger un drain inmediato (oportunista; si hay red, llega ya).
+            _ = Drainer.DrainOnceAsync();
+
+            ResetForm();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Error al encolar: {ex.Message}";
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void ResetForm()
+    {
+        _lat = -34.6037m;
+        _lng = -58.3816m;
+        _accuracy = null;
+        _captureMode = "detenido";
+        _error = null;
+    }
+}

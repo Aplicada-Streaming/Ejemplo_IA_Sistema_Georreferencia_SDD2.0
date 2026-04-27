@@ -22,6 +22,8 @@
     <ProjectReference Include="..\Sgr.Modules.Identity\Sgr.Modules.Identity.csproj" />
     <ProjectReference Include="..\Sgr.Modules.Templates\Sgr.Modules.Templates.csproj" />
     <ProjectReference Include="..\Sgr.Modules.Surveys\Sgr.Modules.Surveys.csproj" />
+    <ProjectReference Include="..\Sgr.Modules.Sync\Sgr.Modules.Sync.csproj" />
+    <ProjectReference Include="..\Sgr.Modules.Points\Sgr.Modules.Points.csproj" />
   </ItemGroup>
 
 </Project>

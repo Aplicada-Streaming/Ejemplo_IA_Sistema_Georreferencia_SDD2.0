@@ -11,6 +11,13 @@ public interface ISgrApiClient
     Task<LoginResult> LoginAsync(string email, string password, CancellationToken ct = default);
     Task<IReadOnlyList<SurveyDto>> ListSurveysAsync(CancellationToken ct = default);
     Task<SurveyDto> CreateSurveyAsync(CreateSurveyDto request, CancellationToken ct = default);
+
+    /// <summary>
+    /// US-04: push de un batch de eventos al backend. Idempotente por EventId (RN-06).
+    /// El cuerpo se serializa tal cual desde <paramref name="eventsJson"/> para que el outbox
+    /// pueda persistir el JSON exacto que se envió y reusarlo en reintentos sin reserialización.
+    /// </summary>
+    Task<SyncPushResponseDto> PushEventsRawAsync(string eventsJson, CancellationToken ct = default);
 }
 
 public sealed class SgrApiClient : ISgrApiClient
@@ -87,6 +94,35 @@ public sealed class SgrApiClient : ISgrApiClient
 
         return await response.Content.ReadFromJsonAsync<SurveyDto>(cancellationToken: ct)
             ?? throw new InvalidOperationException("Respuesta vacía.");
+    }
+
+    public async Task<SyncPushResponseDto> PushEventsRawAsync(string eventsJson, CancellationToken ct = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/sync/push")
+        {
+            Content = new StringContent(
+                "{\"events\":" + eventsJson + "}",
+                System.Text.Encoding.UTF8,
+                "application/json"),
+        };
+        await AttachAuthAsync(request);
+
+        using var response = await _http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            var problem = await ReadProblemAsync(response, ct);
+            throw new SgrApiException(
+                (int)response.StatusCode,
+                problem?.Title ?? response.ReasonPhrase ?? "Error",
+                problem?.Detail ?? "Sync push falló.",
+                problem?.ErrorCode);
+        }
+
+        return await response.Content.ReadFromJsonAsync<SyncPushResponseDto>(
+            new JsonSerializerOptions(JsonSerializerDefaults.Web)
+            {
+                Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() },
+            }, ct) ?? throw new InvalidOperationException("Respuesta del sync vacía.");
     }
 
     private async Task AttachAuthAsync(HttpRequestMessage request)
@@ -192,3 +228,31 @@ public abstract record LoginResult
     public sealed record Forbidden(string Detail) : LoginResult;
     public sealed record Error(string Detail) : LoginResult;
 }
+
+/// <summary>
+/// Mismo schema que el SyncEventDto del backend (Sgr.Modules.Sync.Application.SyncEventDto).
+/// Lo replicamos acá para evitar atar la app móvil al ensamblado del backend.
+/// </summary>
+public sealed record SyncEventDto(
+    Guid EventId,
+    string EntityType,
+    Guid EntityId,
+    string EventType,
+    string? Field,
+    string? OldValueJson,
+    string? NewValueJson,
+    Guid AuthorId,
+    string Origin,
+    string? DeviceId,
+    DateTime TimestampOriginal);
+
+public sealed record SyncPushResponseDto(
+    int Received,
+    int Applied,
+    int Skipped,
+    IReadOnlyList<SyncEventResultDto> Results);
+
+public sealed record SyncEventResultDto(
+    Guid EventId,
+    string Outcome,    // "Applied" | "Idempotent" | "LosesLWW" | "LosesOwnerPrecedence" | "RejectedPostClose" | ...
+    string? Message);

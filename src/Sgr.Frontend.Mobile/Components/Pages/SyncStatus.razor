@@ -1,0 +1,149 @@
+@page "/sync"
+@attribute [Authorize]
+@inject IPendingOperationStore Store
+@inject IOutboxDrainer Drainer
+@inject ISnackbar Snackbar
+@implements IDisposable
+
+<PageTitle>SGR · Estado de sincronización</PageTitle>
+
+<MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+    <MudText Typo="Typo.h5">Sincronización</MudText>
+    <MudIconButton Icon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" Color="Color.Primary" />
+</MudStack>
+
+<MudGrid Spacing="2" Class="mb-3">
+    <MudItem xs="6">
+        <MudPaper Class="pa-3" Elevation="1">
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">Pendientes</MudText>
+            <MudText Typo="Typo.h5" Color="Color.Warning">@_countPending</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6">
+        <MudPaper Class="pa-3" Elevation="1">
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">Errores terminales</MudText>
+            <MudText Typo="Typo.h5" Color="Color.Error">@_countTerminal</MudText>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Class="mb-2"
+           StartIcon="@Icons.Material.Filled.CloudSync"
+           OnClick="DrainNowAsync" Disabled="_draining">
+    @(_draining ? "Sincronizando..." : "Sincronizar ahora")
+</MudButton>
+
+@if (_lastDrain is not null)
+{
+    <MudAlert Severity="@(_lastDrain.FailedTransient + _lastDrain.FailedTerminal == 0 ? Severity.Success : Severity.Warning)"
+              Class="mb-3" Dense="true">
+        Último drain: enviadas @_lastDrain.Sent · transitorias @_lastDrain.FailedTransient · terminales @_lastDrain.FailedTerminal
+    </MudAlert>
+}
+
+<MudText Typo="Typo.subtitle1" Class="mb-2">Operaciones recientes</MudText>
+
+@if (_ops.Count == 0)
+{
+    <MudPaper Class="pa-4" Elevation="0" Style="text-align:center;">
+        <MudIcon Icon="@Icons.Material.Filled.Done" Color="Color.Success" Size="Size.Large" />
+        <MudText Typo="Typo.body1" Class="mud-text-secondary mt-1">Outbox vacío</MudText>
+    </MudPaper>
+}
+else
+{
+    <MudList T="string" Dense="true">
+        @foreach (var op in _ops)
+        {
+            <MudListItem T="string" Icon="@StatusIcon(op.Status)" IconColor="@StatusColor(op.Status)">
+                <MudText Typo="Typo.body2">
+                    <strong>@op.Status</strong> · attempts @op.Attempts
+                </MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    @op.CreatedAt.ToLocalTime().ToString("HH:mm:ss")
+                    @if (!string.IsNullOrWhiteSpace(op.LastError))
+                    {
+                        <span style="color: var(--mud-palette-error);"> · @op.LastError</span>
+                    }
+                </MudText>
+            </MudListItem>
+            <MudDivider />
+        }
+    </MudList>
+}
+
+@code {
+    private List<Sgr.Frontend.Mobile.Outbox.PendingOperation> _ops = new();
+    private int _countPending;
+    private int _countTerminal;
+    private bool _draining;
+    private DrainResult? _lastDrain;
+    private System.Threading.Timer? _pollTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Store.InitializeAsync();
+        await LoadAsync();
+
+        // Asegurar que el drainer esté corriendo en background.
+        await Drainer.StartAsync(CancellationToken.None);
+
+        // Refrescar UI cada 3 segundos para ver cambios del background drainer.
+        _pollTimer = new System.Threading.Timer(async _ =>
+        {
+            await InvokeAsync(LoadAsync);
+        }, null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
+    }
+
+    private async Task LoadAsync()
+    {
+        var ops = await Store.GetAllAsync();
+        _ops = ops.Take(20).ToList();
+        _countPending = await Store.CountAsync(Sgr.Frontend.Mobile.Outbox.OutboxStatus.Pending)
+                      + await Store.CountAsync(Sgr.Frontend.Mobile.Outbox.OutboxStatus.Error)
+                      + await Store.CountAsync(Sgr.Frontend.Mobile.Outbox.OutboxStatus.InFlight);
+        _countTerminal = await Store.CountAsync(Sgr.Frontend.Mobile.Outbox.OutboxStatus.TerminalError);
+        StateHasChanged();
+    }
+
+    private async Task DrainNowAsync()
+    {
+        _draining = true;
+        try
+        {
+            _lastDrain = await Drainer.DrainOnceAsync();
+            await LoadAsync();
+            Snackbar.Add($"Drain: enviadas {_lastDrain.Sent}, fallidas {_lastDrain.FailedTransient + _lastDrain.FailedTerminal}",
+                _lastDrain.Sent > 0 ? Severity.Success : Severity.Info);
+        }
+        finally
+        {
+            _draining = false;
+        }
+    }
+
+    private static string StatusIcon(string status) => status switch
+    {
+        Sgr.Frontend.Mobile.Outbox.OutboxStatus.Pending => Icons.Material.Filled.Schedule,
+        Sgr.Frontend.Mobile.Outbox.OutboxStatus.InFlight => Icons.Material.Filled.CloudUpload,
+        Sgr.Frontend.Mobile.Outbox.OutboxStatus.Sent => Icons.Material.Filled.CloudDone,
+        Sgr.Frontend.Mobile.Outbox.OutboxStatus.Error => Icons.Material.Filled.Warning,
+        Sgr.Frontend.Mobile.Outbox.OutboxStatus.TerminalError => Icons.Material.Filled.Error,
+        _ => Icons.Material.Filled.Help,
+    };
+
+    private static Color StatusColor(string status) => status switch
+    {
+        Sgr.Frontend.Mobile.Outbox.OutboxStatus.Pending => Color.Warning,
+        Sgr.Frontend.Mobile.Outbox.OutboxStatus.InFlight => Color.Info,
+        Sgr.Frontend.Mobile.Outbox.OutboxStatus.Sent => Color.Success,
+        Sgr.Frontend.Mobile.Outbox.OutboxStatus.Error => Color.Warning,
+        Sgr.Frontend.Mobile.Outbox.OutboxStatus.TerminalError => Color.Error,
+        _ => Color.Default,
+    };
+
+    public void Dispose()
+    {
+        _pollTimer?.Dispose();
+    }
+}

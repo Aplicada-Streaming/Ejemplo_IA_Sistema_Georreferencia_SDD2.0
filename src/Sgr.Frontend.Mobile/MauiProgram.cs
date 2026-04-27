@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using MudBlazor.Services;
 using Sgr.Frontend.Mobile.Api;
 using Sgr.Frontend.Mobile.Auth;
+using Sgr.Frontend.Mobile.Outbox;
 
 namespace Sgr.Frontend.Mobile;
 
@@ -45,6 +46,11 @@ public static class MauiProgram
             sp => sp.GetRequiredService<MobileAuthenticationStateProvider>());
         builder.Services.AddAuthorizationCore();
         builder.Services.AddCascadingAuthenticationState();
+
+        // Outbox + drainer (US-03).
+        builder.Services.AddSingleton<IPendingOperationStore, SqlitePendingOperationStore>();
+        builder.Services.AddScoped<IOutboxEnqueueService, OutboxEnqueueService>();
+        builder.Services.AddSingleton<IOutboxDrainer, OutboxDrainer>();
 
 #if DEBUG
         builder.Services.AddBlazorWebViewDeveloperTools();

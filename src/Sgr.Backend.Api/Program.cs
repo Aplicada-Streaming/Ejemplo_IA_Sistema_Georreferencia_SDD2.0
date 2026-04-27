@@ -9,6 +9,7 @@ using Sgr.Backend.Api.Startup;
 using Sgr.Modules.Identity;
 using Sgr.Modules.Identity.Authentication;
 using Sgr.Modules.Surveys;
+using Sgr.Modules.Sync;
 using Sgr.Modules.Templates;
 using Sgr.Persistence;
 
@@ -35,7 +36,8 @@ try
         .AddSgrPersistence(connectionString)
         .AddSgrIdentity(builder.Configuration)
         .AddSgrTemplates()
-        .AddSgrSurveys();
+        .AddSgrSurveys()
+        .AddSgrSync();
 
     builder.Services.Configure<SeedOptions>(builder.Configuration.GetSection(SeedOptions.SectionName));
 

@@ -28,6 +28,7 @@
     <ProjectReference Include="..\..\src\Sgr.Backend.Api\Sgr.Backend.Api.csproj" />
     <ProjectReference Include="..\..\src\Sgr.Persistence\Sgr.Persistence.csproj" />
     <ProjectReference Include="..\..\src\Sgr.Domain\Sgr.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Sgr.Modules.Sync\Sgr.Modules.Sync.csproj" />
   </ItemGroup>
 
 </Project>
