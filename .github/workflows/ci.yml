@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Concurrency: cancela CI runs viejos del mismo branch (PRs activos) para no
+# saturar runners con commits intermedios.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: build + tests (no-mobile)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # global.json fija el SDK exacto. setup-dotnet lo respeta.
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore (slnf sin MAUI)
+        run: dotnet restore sgr.no-mobile.slnf
+
+      - name: Build
+        run: dotnet build sgr.no-mobile.slnf --configuration Release --no-restore
+
+      - name: Unit tests
+        run: dotnet test tests/Sgr.Tests.Unit/Sgr.Tests.Unit.csproj
+             --configuration Release --no-build
+             --logger "trx;LogFileName=unit.trx"
+             --results-directory TestResults
+             --filter "FullyQualifiedName!~Mobile"
+
+      - name: Integration tests
+        run: dotnet test tests/Sgr.Tests.Integration/Sgr.Tests.Integration.csproj
+             --configuration Release --no-build
+             --logger "trx;LogFileName=integration.trx"
+             --results-directory TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults
+          retention-days: 14

@@ -34,7 +34,16 @@ public class EventApplierCustomFieldsTests
         db.Points.Add(point);
 
         db.SaveChanges();
-        return (new EventApplier(db, clock), db, ownerId, point.Id);
+        // El detector real consulta TemplateVersions (que pueden no existir en este unit test);
+        // como esta suite cubre LWW/precedence puro y no el detector, le pasamos un noop.
+        var detector = new NoopMergeCandidateDetector();
+        return (new EventApplier(db, clock, detector), db, ownerId, point.Id);
+    }
+
+    private sealed class NoopMergeCandidateDetector : IMergeCandidateDetector
+    {
+        public Task DetectFromAsync(Sgr.Domain.Points.Point newOrMovedPoint, CancellationToken ct = default) =>
+            Task.CompletedTask;
     }
 
     private SyncEventDto FieldEvent(Guid pointId, Guid authorId, string fieldKey, string valueJson, DateTime ts) =>

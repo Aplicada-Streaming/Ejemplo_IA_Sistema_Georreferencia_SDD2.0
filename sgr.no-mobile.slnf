@@ -1,0 +1,19 @@
+{
+  "solution": {
+    "path": "sgr.sln",
+    "projects": [
+      "src\\Sgr.Backend.Api\\Sgr.Backend.Api.csproj",
+      "src\\Sgr.Domain\\Sgr.Domain.csproj",
+      "src\\Sgr.Persistence\\Sgr.Persistence.csproj",
+      "src\\Sgr.Modules.Identity\\Sgr.Modules.Identity.csproj",
+      "src\\Sgr.Modules.Templates\\Sgr.Modules.Templates.csproj",
+      "src\\Sgr.Modules.Surveys\\Sgr.Modules.Surveys.csproj",
+      "src\\Sgr.Modules.Sync\\Sgr.Modules.Sync.csproj",
+      "src\\Sgr.Modules.Storage\\Sgr.Modules.Storage.csproj",
+      "src\\Sgr.Modules.Points\\Sgr.Modules.Points.csproj",
+      "src\\Sgr.Frontend.Web\\Sgr.Frontend.Web.csproj",
+      "tests\\Sgr.Tests.Unit\\Sgr.Tests.Unit.csproj",
+      "tests\\Sgr.Tests.Integration\\Sgr.Tests.Integration.csproj"
+    ]
+  }
+}

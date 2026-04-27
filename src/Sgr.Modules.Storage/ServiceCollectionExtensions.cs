@@ -38,6 +38,7 @@ public static class ServiceCollectionExtensions
 
         // Slice 8 / US-17 — config de storage persistida con cifrado de credenciales.
         services.AddDataProtection();
+        services.AddSingleton<IStorageAdapterBuilder, StorageAdapterBuilder>();
         services.AddScoped<IStorageConfigService, StorageConfigService>();
 
         return services;

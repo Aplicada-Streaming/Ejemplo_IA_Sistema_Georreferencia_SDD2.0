@@ -42,8 +42,8 @@ para que Sprint 11 los priorice contra bugs de estabilización antes del release
 
 | ID | Severidad | Descripción | Archivos clave |
 |---|---|---|---|
-| DT-S8.1 | 🔴 Alta | **Hot-swap del adapter activo**: cambios via wizard quedan en DB pero `StaticActiveAdapterResolver` sigue leyendo `Storage:ActiveAdapter` de appsettings hasta el próximo restart. Para producción real hay que reemplazar por un resolver dinámico que lea desde DB en cada request (cacheado con TTL corto, ej. 30s). | src/Sgr.Modules.Storage/PhotoStorageAdapterFactory.cs (`IActiveAdapterResolver`) |
-| DT-S8.2 | 🟡 Media | Refactor de los Options de adapters S3/FTP/SFTP para que se rebooten con `IOptionsMonitor<T>` cuando cambia la config en DB. Hoy los `IOptions<T>` se inyectan al startup. | src/Sgr.Modules.Storage/Adapters/* + ServiceCollectionExtensions.cs |
+| DT-S8.1 | ✅ Sprint 11 | **Hot-swap del adapter activo** — `PhotoStorageAdapterFactory` ahora consulta `SystemConfig.storage.active` con cache TTL 30s y construye un adapter ephemeral con la config de DB; fallback a appsettings si no hay config. Cambios via wizard se reflejan en ≤30s sin restart. | src/Sgr.Modules.Storage/PhotoStorageAdapterFactory.cs |
+| DT-S8.2 | ✅ Sprint 11 | Resuelto junto con DT-S8.1 vía `IStorageAdapterBuilder` que construye adapters ephemerales con la config de DB (no via `IOptionsMonitor` puro, pero efecto equivalente: cada cambio de config produce un adapter nuevo en el siguiente request post-cache-expiry). | src/Sgr.Modules.Storage/Configuration/IStorageAdapterBuilder.cs |
 | DT-S8.3 | 🟢 Baja | DataProtection actualmente persiste keys en el filesystem default de aspnetcore. Para deploy multi-instancia hay que configurar PersistKeysToFileSystem(shared) o PersistKeysToAzureBlobStorage o equivalente. | src/Sgr.Modules.Storage/ServiceCollectionExtensions.cs (`AddDataProtection`) |
 
 ### Slice 9 — Panel conflictos (E.9 commit Slice 9)
@@ -68,7 +68,7 @@ para que Sprint 11 los priorice contra bugs de estabilización antes del release
 
 | ID | Severidad | Descripción | Archivos clave |
 |---|---|---|---|
-| DT-X.1 | 🔴 Alta | **CI pipeline**: el repo no tiene workflow de GitHub Actions / Azure Pipelines. La regla de "tests pasan en CI" del DoR se cumple corriendo `dotnet test` localmente. Para ramping del equipo es esencial automatizarlo. | .github/workflows/ci.yml (crear) |
+| DT-X.1 | ✅ Sprint 11 | **CI pipeline** — `.github/workflows/ci.yml` con `dotnet build + test` sobre `sgr.no-mobile.slnf` (filter que excluye Sgr.Frontend.Mobile para no requerir MAUI workloads en runners Linux). Sube TRX como artifact para drilldown de fallos. | .github/workflows/ci.yml + sgr.no-mobile.slnf |
 | DT-X.2 | 🟡 Media | Tests E2E con backend real + DB SQL Server (vimos que el seeding bloquea SQL Server local en sesiones de dev). Los tests integration usan EF InMemory que no atrapa diferencias con SQL real. | tests/Sgr.Tests.Integration.Sql (crear) usando Testcontainers + mssql |
 | DT-X.3 | 🟡 Media | Tests integración para adapters S3/FTP/SFTP (CA-18.4). Hoy sólo Local tiene cobertura real; los otros pasan por unit tests del módulo. Testcontainers + minio + vsftpd resolverían. | tests/Sgr.Tests.Integration/Storage/ (extender) |
 | DT-X.4 | 🟢 Baja | Logging estructurado con correlation-id ya está activo. Falta dashboard / agregación (Seq, ELK, Application Insights). | Configuración del entorno productivo |
@@ -77,11 +77,16 @@ para que Sprint 11 los priorice contra bugs de estabilización antes del release
 
 ## Sugerencia de priorización para Sprint 11
 
-1. **DT-S8.1 + DT-S8.2** (alta): hot-swap storage es funcionalidad esperada por el cliente; sin esto el wizard pide restart manual del backend en producción.
-2. **DT-X.1** (alta): CI pipeline es operacional y previene regressions.
-3. **DT-S6.1** (media): UI lectura tiene gran impacto en percepción de calidad.
-4. **DT-S10.1, DT-S10.2** (media): la fusión es Could Have; mejoras visuales pueden esperar a v2.
-5. **DT-S9.1** (media): post-close revert es edge case; documentar workaround manual mientras tanto.
+**Resueltas en Sprint 11 (commit `<hash>`)**:
+- ✅ DT-S8.1 + DT-S8.2: hot-swap storage activo (factory dinámico con cache TTL 30s)
+- ✅ DT-X.1: CI pipeline GitHub Actions con solution filter sin MAUI
+
+**Pendientes priorizadas**:
+1. **DT-S6.1** (media): UI lectura tiene gran impacto en percepción de calidad.
+2. **DT-S10.1, DT-S10.2** (media): la fusión es Could Have; mejoras visuales pueden esperar a v2.
+3. **DT-S9.1** (media): post-close revert es edge case; documentar workaround manual mientras tanto.
+4. **DT-X.2** (media): tests E2E con SQL real via Testcontainers.
+5. **DT-X.3** (media): tests integración para adapters S3/FTP/SFTP.
 6. **Resto** (baja): cleanup tras MVP.
 
 ---

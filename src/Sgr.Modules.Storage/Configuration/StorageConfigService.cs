@@ -1,11 +1,9 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using Sgr.Domain.Common;
 using Sgr.Domain.Photos;
 using Sgr.Domain.SystemConfig;
-using Sgr.Modules.Storage.Adapters;
 using Sgr.Persistence;
 
 namespace Sgr.Modules.Storage.Configuration;
@@ -22,18 +20,18 @@ public sealed class StorageConfigService : IStorageConfigService
     private readonly SgrDbContext _db;
     private readonly IDataProtectionProvider _protectionProvider;
     private readonly IDateTimeProvider _clock;
-    private readonly ILoggerFactory _loggerFactory;
+    private readonly IStorageAdapterBuilder _adapterBuilder;
 
     public StorageConfigService(
         SgrDbContext db,
         IDataProtectionProvider protectionProvider,
         IDateTimeProvider clock,
-        ILoggerFactory loggerFactory)
+        IStorageAdapterBuilder adapterBuilder)
     {
         _db = db;
         _protectionProvider = protectionProvider;
         _clock = clock;
-        _loggerFactory = loggerFactory;
+        _adapterBuilder = adapterBuilder;
     }
 
     public async Task<StorageConfigDto?> GetActiveAsync(CancellationToken ct = default)
@@ -72,7 +70,7 @@ public sealed class StorageConfigService : IStorageConfigService
     public async Task<StorageTestResult> TestAsync(StorageConfigDto config, CancellationToken ct = default)
     {
         Validate(config);
-        var adapter = BuildAdapter(config);
+        var adapter = _adapterBuilder.Build(config);
         var sw = System.Diagnostics.Stopwatch.StartNew();
         try
         {
@@ -87,56 +85,6 @@ public sealed class StorageConfigService : IStorageConfigService
             sw.Stop();
             return new StorageTestResult(false, $"{ex.GetType().Name}: {ex.Message}", sw.ElapsedMilliseconds);
         }
-    }
-
-    private IPhotoStorageAdapter BuildAdapter(StorageConfigDto config)
-    {
-        // Construimos un adapter ephemeral usando la config provista. Reusamos las
-        // implementaciones existentes pasándoles las options por wrapping manual.
-        return config.Adapter switch
-        {
-            "local" => new LocalFileSystemPhotoStorageAdapter(
-                Microsoft.Extensions.Options.Options.Create(new LocalStorageOptions
-                {
-                    RootPath = config.Config.Local!.RootPath,
-                }),
-                _loggerFactory.CreateLogger<LocalFileSystemPhotoStorageAdapter>()),
-            "s3" => new S3PhotoStorageAdapter(
-                Microsoft.Extensions.Options.Options.Create(new S3StorageOptions
-                {
-                    BucketName = config.Config.S3!.BucketName,
-                    Region = config.Config.S3.Region,
-                    AccessKey = config.Config.S3.AccessKey,
-                    SecretKey = config.Config.S3.SecretKey,
-                    ServiceUrl = config.Config.S3.ServiceUrl,
-                    ForcePathStyle = config.Config.S3.ForcePathStyle,
-                }),
-                _loggerFactory.CreateLogger<S3PhotoStorageAdapter>()),
-            "ftp" => new FtpPhotoStorageAdapter(
-                Microsoft.Extensions.Options.Options.Create(new FtpStorageOptions
-                {
-                    Host = config.Config.Ftp!.Host,
-                    Port = config.Config.Ftp.Port,
-                    Username = config.Config.Ftp.Username,
-                    Password = config.Config.Ftp.Password,
-                    RemoteRoot = config.Config.Ftp.RemoteRoot,
-                    UseTls = config.Config.Ftp.UseTls,
-                }),
-                _loggerFactory.CreateLogger<FtpPhotoStorageAdapter>()),
-            "sftp" => new SftpPhotoStorageAdapter(
-                Microsoft.Extensions.Options.Options.Create(new SftpStorageOptions
-                {
-                    Host = config.Config.Sftp!.Host,
-                    Port = config.Config.Sftp.Port,
-                    Username = config.Config.Sftp.Username,
-                    Password = config.Config.Sftp.Password,
-                    PrivateKeyPath = config.Config.Sftp.PrivateKeyPath,
-                    PrivateKeyPassphrase = config.Config.Sftp.PrivateKeyPassphrase,
-                    RemoteRoot = config.Config.Sftp.RemoteRoot,
-                }),
-                _loggerFactory.CreateLogger<SftpPhotoStorageAdapter>()),
-            _ => throw new ArgumentException($"Adapter '{config.Adapter}' desconocido."),
-        };
     }
 
     private static void Validate(StorageConfigDto config)
