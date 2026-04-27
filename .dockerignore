@@ -1,0 +1,45 @@
+# Build outputs
+**/bin/
+**/obj/
+**/out/
+**/TestResults/
+
+# IDE / OS
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# CI / scripts (no van adentro de las imagenes runtime)
+.github/
+scripts/
+guide/
+docs/
+devs/
+
+# Mobile (no se dockeriza)
+src/Sgr.Frontend.Mobile/
+src/Sgr.Frontend.Mobile/**
+
+# Tests (no van a imagenes prod)
+tests/
+
+# Storage local de dev (puede contener fotos pesadas)
+**/wwwroot/lib/leaflet/.cache/
+
+# Docker artifacts (evita meterlos a si mismos)
+**/Dockerfile*
+**/.dockerignore
+**/docker-compose*.yml
+
+# vs.bat helper local
+vs.bat
+sgr.no-mobile.slnf

@@ -197,8 +197,13 @@ public class MergeCandidatesTests : IClassFixture<SgrApiFactory>
         var collabB = Guid.NewGuid();
         var t0 = DateTime.UtcNow.AddDays(-1);
 
-        var pa = Guid.NewGuid();
-        var pb = Guid.NewGuid();
+        // MergeCandidate normaliza el par a PointAId < PointBId. Forzamos el orden de
+        // los GUIDs para que el assert sobre candidate.PointAId siempre apunte al `pa`
+        // del test (con title "Versión A"), independientemente del random del RNG.
+        var ids = new[] { Guid.NewGuid(), Guid.NewGuid() };
+        Array.Sort(ids);
+        var pa = ids[0];
+        var pb = ids[1];
         // El create y el field_updated van en pushes separados para que EF flushee el
         // create antes de que el field_updated lo busque por Id.
         await PushAsync(clientA, new[] { NewPointCreated(pa, surveyId, collabA, 0m, 0m, t0) });

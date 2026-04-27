@@ -11,7 +11,7 @@ REM   2) Build + install del APK en el dispositivo
 REM   3) Lanza la app
 
 setlocal
-cd /d %~dp0..
+cd /d %~dp0..\..
 
 set DEVICE_SERIAL=ZY32GSJ88S
 set APP_ID=com.companyname.sgr.frontend.mobile

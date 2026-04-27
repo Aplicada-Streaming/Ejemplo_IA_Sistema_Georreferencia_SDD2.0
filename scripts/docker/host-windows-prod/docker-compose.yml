@@ -1,0 +1,83 @@
+# Compose para deploy del SGR en host Windows con Docker Desktop.
+# Las variables se leen de .env (generado por configure.bat).
+#
+# Servicios:
+#   sgr-db       SQL Server 2022 Express (named volume sgr-db-data)
+#   sgr-backend  API .NET 10 (puerto host 5000)
+#   sgr-web      Blazor Server (puerto host 5100)
+#
+# El storage del backend (fotos) se mapea a HOST_PHOTOS_PATH del host.
+
+services:
+  sgr-db:
+    image: ${DOCKERHUB_USER}/sgr-db:latest
+    container_name: sgr-db
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${SQL_SA_PASSWORD}
+      MSSQL_PID: Express
+    ports:
+      - "1433:1433"
+    volumes:
+      - sgr-db-data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -No -Q 'SELECT 1' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    networks:
+      - sgr-net
+    restart: unless-stopped
+
+  sgr-backend:
+    image: ${DOCKERHUB_USER}/sgr-backend:latest
+    container_name: sgr-backend
+    depends_on:
+      sgr-db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:5000
+      ConnectionStrings__DefaultConnection: "Server=sgr-db,1433;Database=SgrDev;User Id=sa;Password=${SQL_SA_PASSWORD};TrustServerCertificate=True;MultipleActiveResultSets=True"
+      Jwt__SigningKey: ${JWT_SIGNING_KEY}
+      Jwt__Issuer: sgr-backend
+      Jwt__Audience: sgr-clients
+      Jwt__AccessTokenMinutes: "30"
+      Seed__AdminPassword: ${SEED_ADMIN_PASSWORD}
+      Seed__JefePassword: ${SEED_JEFE_PASSWORD}
+      Seed__RelevadorPassword: ${SEED_RELEVADOR_PASSWORD}
+      Storage__ActiveAdapter: local
+      Storage__Local__RootPath: /var/sgr/photos
+    ports:
+      - "5000:5000"
+    volumes:
+      # Bind mount: HOST_PHOTOS_PATH (Windows) → /var/sgr/photos (container).
+      - "${HOST_PHOTOS_PATH}:/var/sgr/photos"
+    networks:
+      - sgr-net
+    restart: unless-stopped
+
+  sgr-web:
+    image: ${DOCKERHUB_USER}/sgr-web:latest
+    container_name: sgr-web
+    depends_on:
+      - sgr-backend
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:5100
+      # Web habla con backend por la red interna del compose.
+      BackendApi__BaseUrl: http://sgr-backend:5000
+    ports:
+      - "5100:5100"
+    networks:
+      - sgr-net
+    restart: unless-stopped
+
+networks:
+  sgr-net:
+    driver: bridge
+
+volumes:
+  sgr-db-data:
+    driver: local

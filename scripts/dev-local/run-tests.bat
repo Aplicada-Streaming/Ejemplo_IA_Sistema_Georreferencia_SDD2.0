@@ -3,7 +3,7 @@ REM run-tests.bat
 REM Ejecuta unit + integration tests con cobertura.
 
 setlocal
-cd /d %~dp0..
+cd /d %~dp0..\..
 
 echo ===================================
 echo Ejecutando unit + integration tests

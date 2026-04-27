@@ -4,7 +4,7 @@ REM Inicia el backend API en localhost:5000 (HTTP, dev).
 REM Aplica migraciones automaticamente al arrancar y ejecuta seeds.
 
 setlocal
-cd /d %~dp0..
+cd /d %~dp0..\..
 
 set ASPNETCORE_ENVIRONMENT=Development
 set ASPNETCORE_URLS=http://localhost:5000

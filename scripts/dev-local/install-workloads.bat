@@ -9,7 +9,7 @@ REM SDK mas reciente. Esto evita el bug clasico de instalar maui-android
 REM en un feature band distinto al que usan los proyectos.
 
 setlocal
-cd /d %~dp0..
+cd /d %~dp0..\..
 
 echo === Verificando version de SDK que usa este repo ===
 dotnet --version

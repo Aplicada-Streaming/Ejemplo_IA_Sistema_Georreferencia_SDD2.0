@@ -85,18 +85,34 @@ public static class MauiProgram
         return builder.Build();
     }
 
+    private const string DefaultBackendUrl = "http://localhost:5000";
+
+    /// <summary>
+    /// La URL del backend se lee de <c>Resources/Raw/sgr-config.json</c> (un MauiAsset).
+    /// Ese archivo lo patchea <c>scripts/docker/host-windows-prod/publish-mobile.bat</c>
+    /// con la IP del host destino antes de compilar el APK que se distribuye al cliente.
+    /// En dev local con USB + adb reverse el asset trae <c>localhost:5000</c>.
+    /// Ante cualquier error de lectura caemos al default para no romper el arranque.
+    /// </summary>
     private static string ResolveBackendUrl()
     {
-        // Default: localhost:5000.
-        //   - Windows: backend corre en la misma máquina.
-        //   - Android (USB + ADB): se establece `adb reverse tcp:5000 tcp:5000` antes
-        //     de iniciar la app, lo cual hace que `localhost:5000` desde el dispositivo
-        //     se reenvíe al PC. Ver scripts/deploy-mobile.bat.
-        //   - Android emulator: lo mismo que arriba; alternativamente podría usarse 10.0.2.2.
-        //   - iOS simulator: localhost también funciona.
-        //
-        // Para correr contra una IP de WiFi, sobreescribir esta URL en la entrada de la app
-        // o exponer la BackendApiOptions vía Preferences.
-        return "http://localhost:5000";
+        try
+        {
+            using var stream = FileSystem.OpenAppPackageFileAsync("sgr-config.json")
+                .GetAwaiter().GetResult();
+            using var doc = System.Text.Json.JsonDocument.Parse(stream);
+            if (doc.RootElement.TryGetProperty("backendBaseUrl", out var prop) &&
+                prop.ValueKind == System.Text.Json.JsonValueKind.String)
+            {
+                var url = prop.GetString();
+                if (!string.IsNullOrWhiteSpace(url)) return url;
+            }
+        }
+        catch
+        {
+            // El asset puede faltar en builds que excluyen Resources/Raw o si la deserialización
+            // falla. Fallback silencioso al default.
+        }
+        return DefaultBackendUrl;
     }
 }
