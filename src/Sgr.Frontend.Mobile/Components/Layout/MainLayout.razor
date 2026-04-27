@@ -1,0 +1,65 @@
+@inherits LayoutComponentBase
+@inject MobileAuthenticationStateProvider AuthProvider
+@inject NavigationManager Nav
+
+<MudThemeProvider />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <AuthorizeView>
+        <Authorized>
+            <MudAppBar Elevation="2" Color="Color.Primary" Dense="true">
+                <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit"
+                               OnClick="ToggleDrawer" Edge="Edge.Start" />
+                <MudText Typo="Typo.h6">SGR · Móvil</MudText>
+                <MudSpacer />
+                <MudIconButton Icon="@Icons.Material.Filled.Logout" Color="Color.Inherit"
+                               OnClick="LogoutAsync" />
+            </MudAppBar>
+
+            <MudDrawer @bind-Open="_drawerOpen" Variant="DrawerVariant.Temporary" Elevation="1">
+                <MudNavMenu>
+                    <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard"
+                                OnClick="CloseDrawer">
+                        Inicio
+                    </MudNavLink>
+                    <MudNavLink Href="/surveys" Icon="@Icons.Material.Filled.List"
+                                OnClick="CloseDrawer">
+                        Relevamientos
+                    </MudNavLink>
+                    <MudNavLink Href="/surveys/new" Icon="@Icons.Material.Filled.AddCircle"
+                                OnClick="CloseDrawer">
+                        Nuevo
+                    </MudNavLink>
+                </MudNavMenu>
+                <MudDivider />
+                <MudListSubheader>
+                    <MudText Typo="Typo.caption" Class="px-2">
+                        @context.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
+                    </MudText>
+                </MudListSubheader>
+            </MudDrawer>
+        </Authorized>
+    </AuthorizeView>
+
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.Small" Class="pt-4 pb-8">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private bool _drawerOpen;
+
+    private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
+    private void CloseDrawer() => _drawerOpen = false;
+
+    private async Task LogoutAsync()
+    {
+        await AuthProvider.SignOutAsync();
+        Nav.NavigateTo("/login");
+    }
+}

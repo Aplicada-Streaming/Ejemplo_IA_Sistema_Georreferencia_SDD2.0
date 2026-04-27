@@ -1,0 +1,95 @@
+@page "/surveys/new"
+@attribute [Authorize]
+@inject ISgrApiClient Api
+@inject IDeviceIdProvider Device
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>SGR · Nuevo</PageTitle>
+
+<MudText Typo="Typo.h5" Class="mb-3">Nuevo relevamiento</MudText>
+
+<MudPaper Class="pa-4" Elevation="2">
+    <MudForm @ref="_form" @bind-IsValid="_isValid">
+        <MudTextField T="string" Label="Nombre" @bind-Value="_name"
+                      Required="true" RequiredError="El nombre es obligatorio."
+                      MaxLength="200" Variant="Variant.Outlined" />
+
+        <MudTextField T="string" Label="Descripción (opcional)" @bind-Value="_description"
+                      Lines="3" MaxLength="1000" Variant="Variant.Outlined" Class="mt-3" />
+
+        <MudTextField T="string" Label="Etiquetas (opcional)" @bind-Value="_tags"
+                      MaxLength="500" Variant="Variant.Outlined" Class="mt-3"
+                      HelperText="Ej.: puente, zona-norte" />
+
+        <MudAlert Severity="Severity.Info" Class="mt-4" Icon="@Icons.Material.Filled.QrCode">
+            Origen: <code>mobile_capture</code> · Device: <code>@Device.GetDeviceId()</code>
+        </MudAlert>
+
+        @if (_errorMessage is not null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-3">@_errorMessage</MudAlert>
+        }
+
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4" FullWidth="true"
+                   OnClick="SubmitAsync" Disabled="@(!_isValid || _saving)"
+                   StartIcon="@Icons.Material.Filled.Save">
+            @(_saving ? "Guardando..." : "Crear")
+        </MudButton>
+
+        <MudButton Variant="Variant.Text" Color="Color.Default" Class="mt-2" FullWidth="true"
+                   Href="/surveys" Disabled="_saving">
+            Cancelar
+        </MudButton>
+    </MudForm>
+</MudPaper>
+
+@code {
+    private MudForm? _form;
+    private bool _isValid;
+    private bool _saving;
+    private string? _errorMessage;
+
+    private readonly Guid _clientId = Guid.NewGuid();
+    private string _name = string.Empty;
+    private string? _description;
+    private string? _tags;
+
+    private async Task SubmitAsync()
+    {
+        if (_form is null) return;
+        await _form.Validate();
+        if (!_isValid) return;
+
+        _saving = true;
+        _errorMessage = null;
+        try
+        {
+            var dto = new CreateSurveyDto(
+                Id: _clientId,
+                Name: _name,
+                Description: _description,
+                TemplateVersionId: null,
+                Tags: _tags,
+                Origin: "mobile_capture",
+                DeviceId: Device.GetDeviceId(),
+                TimestampOriginal: DateTime.UtcNow);
+
+            var created = await Api.CreateSurveyAsync(dto);
+            Snackbar.Add($"Relevamiento '{created.Name}' creado.", Severity.Success);
+            Nav.NavigateTo("/surveys");
+        }
+        catch (SgrApiException ex)
+        {
+            _errorMessage = $"{ex.Title} ({ex.Status}{(ex.ErrorCode is null ? "" : "/" + ex.ErrorCode)}): {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Error inesperado: {ex.Message}";
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

@@ -1,0 +1,10 @@
+﻿<Router AppAssembly="@typeof(MauiProgram).Assembly">
+    <Found Context="routeData">
+        <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(Layout.MainLayout)">
+            <NotAuthorized>
+                <Sgr.Frontend.Mobile.Components.RedirectToLogin />
+            </NotAuthorized>
+        </AuthorizeRouteView>
+        <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+    </Found>
+</Router>

@@ -1,0 +1,51 @@
+@page "/"
+@attribute [Authorize]
+
+<PageTitle>SGR — Dashboard</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Dashboard</MudText>
+
+<AuthorizeView>
+    <Authorized>
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <MudCard Elevation="2">
+                    <MudCardContent>
+                        <MudText Typo="Typo.h6" Class="mb-2">Tu sesión</MudText>
+                        <MudText Typo="Typo.body1">
+                            <strong>Usuario:</strong> @context.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
+                        </MudText>
+                        <MudText Typo="Typo.body1">
+                            <strong>Rol:</strong> @context.User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value
+                        </MudText>
+                        @{
+                            var areaId = context.User.FindFirst(SgrClaims.AreaId)?.Value;
+                            if (!string.IsNullOrWhiteSpace(areaId))
+                            {
+                                <MudText Typo="Typo.body1">
+                                    <strong>Área:</strong> <code>@areaId</code>
+                                </MudText>
+                            }
+                        }
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+
+            <MudItem xs="12" md="6">
+                <MudCard Elevation="2">
+                    <MudCardContent>
+                        <MudText Typo="Typo.h6" Class="mb-2">Acciones rápidas</MudText>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                                   Href="/surveys/new" StartIcon="@Icons.Material.Filled.Add" Class="me-2 mb-2">
+                            Nuevo relevamiento
+                        </MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                                   Href="/surveys" StartIcon="@Icons.Material.Filled.List" Class="mb-2">
+                            Ver mis relevamientos
+                        </MudButton>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+    </Authorized>
+</AuthorizeView>

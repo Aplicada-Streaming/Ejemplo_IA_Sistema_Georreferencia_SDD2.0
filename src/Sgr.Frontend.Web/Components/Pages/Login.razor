@@ -1,0 +1,51 @@
+@page "/login"
+@layout Sgr.Frontend.Web.Components.Layout.LoginLayout
+@attribute [AllowAnonymous]
+
+<PageTitle>SGR — Iniciar sesión</PageTitle>
+
+<MudPaper Elevation="6" Class="pa-8 mx-auto" Style="max-width: 420px; margin-top: 80px;">
+    <MudText Typo="Typo.h5" Align="Align.Center" Class="mb-4">SGR — Vialidad</MudText>
+    <MudText Typo="Typo.subtitle2" Align="Align.Center" Class="mb-6 mud-text-secondary">
+        Sistema de Gestión de Relevamientos
+    </MudText>
+
+    @if (!string.IsNullOrWhiteSpace(Error))
+    {
+        <MudAlert Severity="Severity.Error" Class="mb-4">@Error</MudAlert>
+    }
+
+    <form action="/auth/login" method="post">
+        <input type="hidden" name="returnUrl" value="@(string.IsNullOrWhiteSpace(ReturnUrl) ? "/" : ReturnUrl)" />
+
+        <div class="mb-4">
+            <label for="email" class="mud-input-label">Correo electrónico</label>
+            <input type="email" id="email" name="email" required autofocus
+                   class="mud-input-input mud-input-root mud-input-root-outlined"
+                   style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px;" />
+        </div>
+
+        <div class="mb-6">
+            <label for="password" class="mud-input-label">Contraseña</label>
+            <input type="password" id="password" name="password" required
+                   class="mud-input-input mud-input-root mud-input-root-outlined"
+                   style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px;" />
+        </div>
+
+        <button type="submit"
+                class="mud-button mud-button-filled mud-button-filled-primary"
+                style="width: 100%; padding: 12px; background: #594ae2; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px;">
+            Iniciar sesión
+        </button>
+    </form>
+
+    <MudDivider Class="my-4" />
+    <MudText Typo="Typo.caption" Align="Align.Center" Class="mud-text-secondary">
+        Móvil restringido a relevadores. Web disponible para todos los roles activos.
+    </MudText>
+</MudPaper>
+
+@code {
+    [SupplyParameterFromQuery] public string? Error { get; set; }
+    [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
+}

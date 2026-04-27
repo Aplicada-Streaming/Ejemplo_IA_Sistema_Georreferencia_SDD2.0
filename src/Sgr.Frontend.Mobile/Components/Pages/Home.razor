@@ -1,0 +1,36 @@
+@page "/"
+@attribute [Authorize]
+
+<PageTitle>SGR · Inicio</PageTitle>
+
+<AuthorizeView>
+    <Authorized>
+        <MudText Typo="Typo.h5" Class="mb-3">Bienvenido</MudText>
+        <MudCard Elevation="2" Class="mb-4">
+            <MudCardContent>
+                <MudText Typo="Typo.body1">
+                    <strong>Usuario:</strong> @context.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
+                </MudText>
+                <MudText Typo="Typo.body1">
+                    <strong>Rol:</strong> @context.User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value
+                </MudText>
+            </MudCardContent>
+        </MudCard>
+
+        <MudStack Spacing="2">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       Href="/surveys/new" StartIcon="@Icons.Material.Filled.AddCircle" FullWidth="true">
+                Nuevo relevamiento
+            </MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                       Href="/surveys" StartIcon="@Icons.Material.Filled.List" FullWidth="true">
+                Mis relevamientos
+            </MudButton>
+        </MudStack>
+
+        <MudAlert Severity="Severity.Info" Class="mt-6" Icon="@Icons.Material.Filled.WifiOff">
+            Trabajo offline disponible: la captura no requiere conexión.
+            La sincronización ocurre automáticamente cuando hay red.
+        </MudAlert>
+    </Authorized>
+</AuthorizeView>

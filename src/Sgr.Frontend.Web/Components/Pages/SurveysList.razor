@@ -1,0 +1,90 @@
+@page "/surveys"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@inject ISgrApiClient Api
+@inject NavigationManager Nav
+
+<PageTitle>SGR — Relevamientos</PageTitle>
+
+<MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudText Typo="Typo.h4">Relevamientos</MudText>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.Add"
+               Href="/surveys/new">
+        Nuevo
+    </MudButton>
+</MudStack>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+}
+else if (_error is not null)
+{
+    <MudAlert Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+}
+else if (_surveys is null || _surveys.Count == 0)
+{
+    <MudPaper Class="pa-8" Elevation="0" Style="text-align:center;">
+        <MudIcon Icon="@Icons.Material.Filled.FolderOpen" Size="Size.Large" Class="mud-text-secondary" />
+        <MudText Typo="Typo.h6" Class="mud-text-secondary mt-2">
+            Aún no hay relevamientos para mostrar.
+        </MudText>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Href="/surveys/new" Class="mt-4">
+            Crear el primero
+        </MudButton>
+    </MudPaper>
+}
+else
+{
+    <MudTable Items="_surveys" Hover="true" Dense="true" Bordered="false" Striped="true">
+        <HeaderContent>
+            <MudTh>Nombre</MudTh>
+            <MudTh>Descripción</MudTh>
+            <MudTh>Estado</MudTh>
+            <MudTh>Etiquetas</MudTh>
+            <MudTh>Creado</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.Name</MudTd>
+            <MudTd>@(string.IsNullOrWhiteSpace(context.Description) ? "—" : context.Description)</MudTd>
+            <MudTd>
+                <MudChip T="string" Size="Size.Small" Color="@StatusColor(context.Status)">
+                    @context.Status
+                </MudChip>
+            </MudTd>
+            <MudTd>@(string.IsNullOrWhiteSpace(context.Tags) ? "—" : context.Tags)</MudTd>
+            <MudTd>@context.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    private bool _loading = true;
+    private string? _error;
+    private IReadOnlyList<SurveyDto>? _surveys;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _surveys = await Api.ListSurveysAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = $"No se pudo cargar el listado: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private static Color StatusColor(string status) => status switch
+    {
+        "abierto" => Color.Success,
+        "cerrado" => Color.Default,
+        "eliminado_logico" => Color.Error,
+        _ => Color.Info,
+    };
+}

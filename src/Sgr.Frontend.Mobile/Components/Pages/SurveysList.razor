@@ -1,0 +1,78 @@
+@page "/surveys"
+@attribute [Authorize]
+@inject ISgrApiClient Api
+
+<PageTitle>SGR · Relevamientos</PageTitle>
+
+<MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+    <MudText Typo="Typo.h5">Relevamientos</MudText>
+    <MudIconButton Icon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync" Color="Color.Primary" />
+</MudStack>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-3" />
+}
+else if (_error is not null)
+{
+    <MudAlert Severity="Severity.Warning" Class="mb-3">@_error</MudAlert>
+    <MudButton Variant="Variant.Outlined" OnClick="LoadAsync">Reintentar</MudButton>
+}
+else if (_surveys is null || _surveys.Count == 0)
+{
+    <MudPaper Class="pa-6 mt-2" Elevation="0" Style="text-align:center;">
+        <MudIcon Icon="@Icons.Material.Filled.FolderOpen" Size="Size.Large" Class="mud-text-secondary" />
+        <MudText Typo="Typo.subtitle1" Class="mt-2 mud-text-secondary">
+            Aún no tenés relevamientos.
+        </MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-3" Href="/surveys/new">
+            Crear el primero
+        </MudButton>
+    </MudPaper>
+}
+else
+{
+    <MudList T="string" Dense="true">
+        @foreach (var s in _surveys)
+        {
+            <MudListItem T="string" Icon="@Icons.Material.Filled.Map">
+                <MudText Typo="Typo.subtitle1">@s.Name</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    @s.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ·
+                    @s.Status
+                    @if (!string.IsNullOrWhiteSpace(s.Tags))
+                    {
+                        <span> · @s.Tags</span>
+                    }
+                </MudText>
+            </MudListItem>
+            <MudDivider />
+        }
+    </MudList>
+}
+
+@code {
+    private bool _loading = true;
+    private string? _error;
+    private IReadOnlyList<SurveyDto>? _surveys;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _surveys = await Api.ListSurveysAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = $"No se pudo cargar el listado: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

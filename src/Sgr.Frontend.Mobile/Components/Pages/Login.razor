@@ -1,0 +1,99 @@
+@page "/login"
+@layout Sgr.Frontend.Mobile.Components.Layout.LoginLayout
+@attribute [AllowAnonymous]
+@inject ISgrApiClient Api
+@inject MobileAuthenticationStateProvider AuthProvider
+@inject NavigationManager Nav
+
+<PageTitle>SGR · Iniciar sesión</PageTitle>
+
+<MudPaper Elevation="6" Class="pa-6 ma-4" Style="width: 100%; max-width: 380px;">
+    <MudStack AlignItems="AlignItems.Center" Class="mb-4">
+        <MudIcon Icon="@Icons.Material.Filled.Map" Color="Color.Primary" Size="Size.Large" />
+        <MudText Typo="Typo.h5">SGR · Vialidad</MudText>
+        <MudText Typo="Typo.subtitle2" Class="mud-text-secondary">Captura en campo</MudText>
+    </MudStack>
+
+    @if (_error is not null)
+    {
+        <MudAlert Severity="Severity.Error" Class="mb-3">@_error</MudAlert>
+    }
+
+    <MudForm @ref="_form" @bind-IsValid="_isValid">
+        <MudTextField T="string" Label="Correo electrónico" @bind-Value="_email"
+                      Required="true" RequiredError="El correo es obligatorio."
+                      InputType="InputType.Email" Variant="Variant.Outlined" />
+        <MudTextField T="string" Label="Contraseña" @bind-Value="_password"
+                      Required="true" RequiredError="La contraseña es obligatoria."
+                      InputType="InputType.Password" Variant="Variant.Outlined" Class="mt-3" />
+
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                   Class="mt-5" Disabled="@(_loading || !_isValid)" OnClick="SubmitAsync"
+                   StartIcon="@Icons.Material.Filled.Login">
+            @(_loading ? "Iniciando sesión..." : "Iniciar sesión")
+        </MudButton>
+    </MudForm>
+
+    <MudDivider Class="my-4" />
+    <MudText Typo="Typo.caption" Align="Align.Center" Class="mud-text-secondary">
+        El acceso móvil está disponible solo para relevadores activos.
+    </MudText>
+</MudPaper>
+
+@code {
+    private MudForm? _form;
+    private bool _isValid;
+    private bool _loading;
+    private string _email = string.Empty;
+    private string _password = string.Empty;
+    private string? _error;
+
+    private async Task SubmitAsync()
+    {
+        _error = null;
+        if (_form is null) return;
+        await _form.Validate();
+        if (!_isValid) return;
+
+        _loading = true;
+        try
+        {
+            var result = await Api.LoginAsync(_email, _password);
+            switch (result)
+            {
+                case LoginResult.Ok ok:
+                    var session = new StoredSession(
+                        AccessToken: ok.Response.AccessToken,
+                        ExpiresAtUtc: ok.Response.ExpiresAtUtc,
+                        UserId: ok.Response.UserId,
+                        Email: _email,
+                        Role: ok.Response.Role,
+                        AreaId: ok.Response.AreaId);
+                    await AuthProvider.SignInAsync(session);
+                    Nav.NavigateTo("/");
+                    break;
+                case LoginResult.InvalidCredentials:
+                    _error = "El usuario o la contraseña son incorrectos.";
+                    break;
+                case LoginResult.Forbidden f:
+                    _error = f.Detail;
+                    break;
+                case LoginResult.Error e:
+                    _error = e.Detail;
+                    break;
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            _error = $"No se pudo contactar al servidor: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            _error = $"Error inesperado: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

@@ -1,0 +1,99 @@
+@page "/surveys/new"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@inject ISgrApiClient Api
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>SGR — Nuevo relevamiento</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Nuevo relevamiento</MudText>
+
+<MudPaper Class="pa-6" Elevation="2" Style="max-width: 720px;">
+    <MudForm @ref="_form" @bind-IsValid="_isValid">
+        <MudTextField T="string" Label="Nombre" @bind-Value="_name"
+                      Required="true" RequiredError="El nombre es obligatorio."
+                      MaxLength="200" Variant="Variant.Outlined" />
+
+        <MudTextField T="string" Label="Descripción (opcional)" @bind-Value="_description"
+                      Lines="3" MaxLength="1000" Variant="Variant.Outlined" Class="mt-4" />
+
+        <MudTextField T="string" Label="Etiquetas (CSV, opcional)" @bind-Value="_tags"
+                      MaxLength="500" Variant="Variant.Outlined" Class="mt-4"
+                      HelperText="Ej.: puente, zona-norte, urgente" />
+
+        <MudAlert Severity="Severity.Info" Class="mt-4">
+            Se usará la plantilla raíz publicada por default.
+            El GUID del relevamiento se genera en este cliente:
+            <code>@_clientId</code>
+        </MudAlert>
+
+        @if (_errorMessage is not null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-4">@_errorMessage</MudAlert>
+        }
+
+        <MudStack Row Spacing="2" Class="mt-6">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       Disabled="@(!_isValid || _saving)"
+                       OnClick="SubmitAsync"
+                       StartIcon="@Icons.Material.Filled.Save">
+                @(_saving ? "Guardando..." : "Crear relevamiento")
+            </MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Default"
+                       Href="/surveys" Disabled="_saving">
+                Cancelar
+            </MudButton>
+        </MudStack>
+    </MudForm>
+</MudPaper>
+
+@code {
+    private MudForm? _form;
+    private bool _isValid;
+    private bool _saving;
+    private string? _errorMessage;
+
+    private Guid _clientId = Guid.NewGuid();
+    private string _name = string.Empty;
+    private string? _description;
+    private string? _tags;
+
+    private async Task SubmitAsync()
+    {
+        if (_form is null) return;
+        await _form.Validate();
+        if (!_isValid) return;
+
+        _saving = true;
+        _errorMessage = null;
+        try
+        {
+            var dto = new CreateSurveyDto(
+                Id: _clientId,
+                Name: _name,
+                Description: _description,
+                TemplateVersionId: null,
+                Tags: _tags,
+                Origin: "web_edit",
+                DeviceId: null,
+                TimestampOriginal: DateTime.UtcNow);
+
+            var created = await Api.CreateSurveyAsync(dto);
+            Snackbar.Add($"Relevamiento '{created.Name}' creado.", Severity.Success);
+            Nav.NavigateTo("/surveys");
+        }
+        catch (SgrApiException ex)
+        {
+            _errorMessage = $"{ex.Title} ({ex.Status}{(ex.ErrorCode is null ? "" : "/" + ex.ErrorCode)}): {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Error inesperado: {ex.Message}";
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}
