@@ -49,6 +49,11 @@ public interface ISgrApiClient
     Task UpdateTemplateCaptureParamsAsync(Guid versionId, string captureParamsJson, CancellationToken ct = default);
     Task PublishTemplateVersionAsync(Guid versionId, CancellationToken ct = default);
 
+    // Slice 9 / US-19 + US-20 — panel de conflictos
+    Task<IReadOnlyList<ConflictDto>> ListConflictsAsync(
+        Guid? surveyId = null, string? type = null, string? status = null, CancellationToken ct = default);
+    Task<ConflictDto> ResolveConflictAsync(Guid conflictId, string action, CancellationToken ct = default);
+
     // Slice 8 / US-17 — config de storage activa (admin only)
     Task<StorageConfigDto?> GetStorageConfigAsync(CancellationToken ct = default);
     Task<StorageConfigDto> SaveStorageConfigAsync(StorageConfigDto config, CancellationToken ct = default);
@@ -327,6 +332,41 @@ public sealed class SgrApiClient : ISgrApiClient
             throw await BuildApiExceptionAsync(response, "No pude listar los valores del punto.", ct);
         return await response.Content.ReadFromJsonAsync<IReadOnlyList<PointFieldValueDto>>(cancellationToken: ct)
             ?? Array.Empty<PointFieldValueDto>();
+    }
+
+    // ───────── Slice 9 / US-19 + US-20 — conflictos ─────────
+
+    public async Task<IReadOnlyList<ConflictDto>> ListConflictsAsync(
+        Guid? surveyId = null, string? type = null, string? status = null, CancellationToken ct = default)
+    {
+        var qs = new List<string>();
+        if (surveyId is not null) qs.Add($"surveyId={surveyId}");
+        if (!string.IsNullOrWhiteSpace(type)) qs.Add($"type={Uri.EscapeDataString(type)}");
+        if (!string.IsNullOrWhiteSpace(status)) qs.Add($"status={Uri.EscapeDataString(status)}");
+        var url = "/api/v1/conflicts" + (qs.Count > 0 ? "?" + string.Join('&', qs) : "");
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        AttachAuth(request);
+        using var response = await _http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+            throw await BuildApiExceptionAsync(response, "No pude listar los conflictos.", ct);
+        return await response.Content.ReadFromJsonAsync<IReadOnlyList<ConflictDto>>(cancellationToken: ct)
+            ?? Array.Empty<ConflictDto>();
+    }
+
+    public async Task<ConflictDto> ResolveConflictAsync(Guid conflictId, string action, CancellationToken ct = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post,
+            $"/api/v1/conflicts/{conflictId}/resolve")
+        {
+            Content = JsonContent.Create(new { Action = action }),
+        };
+        AttachAuth(request);
+        using var response = await _http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+            throw await BuildApiExceptionAsync(response, "No pude resolver el conflicto.", ct);
+        return await response.Content.ReadFromJsonAsync<ConflictDto>(cancellationToken: ct)
+            ?? throw new InvalidOperationException("Respuesta vacía.");
     }
 
     // ───────── Slice 8 / US-17 — config storage ─────────
@@ -706,6 +746,24 @@ public sealed record GeoResolveResultDto(
     Guid PhotoId,
     Guid PointId,
     bool PointWasCreated);
+
+// ───────── Slice 9 / US-19 + US-20 — conflictos ─────────
+
+public sealed record ConflictDto(
+    Guid Id,
+    Guid SurveyId,
+    string Type,
+    Guid EventId,
+    Guid? PointId,
+    string? FieldKey,
+    Guid AuthorId,
+    string? AttemptedValueJson,
+    string? CurrentValueJson,
+    DateTime AttemptedAtUtc,
+    string Status,
+    DateTime? ResolvedAtUtc,
+    Guid? ResolvedBy,
+    string? ResolutionNote);
 
 // ───────── Slice 8 / US-17 — storage config ─────────
 // Clases mutables (no records) para que MudBlazor @bind-Value pueda escribir directo.

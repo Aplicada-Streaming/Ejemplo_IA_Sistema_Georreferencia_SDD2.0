@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Sgr.Domain.Audit;
 using Sgr.Domain.Common;
+using Sgr.Domain.Conflicts;
 using Sgr.Domain.Identity;
 using Sgr.Domain.Points;
 using Sgr.Domain.Surveys;
@@ -143,6 +144,12 @@ public sealed class EventApplier : IEventApplier
             survey.ClosedAt is not null &&
             e.TimestampOriginal > survey.ClosedAt.Value)
         {
+            // US-19: registramos el conflicto pendiente para que el usuario decida
+            // (descartar o reabrir el survey y aplicar). NO grabamos audit del create
+            // — el evento NO sucedió contra el modelo.
+            RecordConflict(survey.Id, ConflictTypes.PostClose, e,
+                pointId: e.EntityId, fieldKey: null,
+                attemptedValueJson: e.NewValueJson, currentValueJson: null);
             return new SyncEventResult(e.EventId, SyncOutcome.RejectedPostClose,
                 $"Captura posterior al cierre del relevamiento ({survey.ClosedAt:O})");
         }
@@ -189,6 +196,11 @@ public sealed class EventApplier : IEventApplier
         if (ownerEverWroteThisField && !thisIsFromOwner)
         {
             await RecordAuditAsync(e, ct);
+            var currentValue = await ReadCurrentFieldValueAsync(point, e.Field!, ct);
+            RecordConflict(point.SurveyId, ConflictTypes.OwnerPrecedence, e,
+                pointId: point.Id, fieldKey: e.Field,
+                attemptedValueJson: e.NewValueJson,
+                currentValueJson: currentValue);
             return new SyncEventResult(e.EventId, SyncOutcome.LosesOwnerPrecedence,
                 "Owner's edit prevails (RN-07)");
         }
@@ -207,6 +219,10 @@ public sealed class EventApplier : IEventApplier
             if (lastOwnerEdit is not null && e.TimestampOriginal <= lastOwnerEdit.TimestampOriginal)
             {
                 await RecordAuditAsync(e, ct);
+                RecordConflict(point.SurveyId, ConflictTypes.Lww, e,
+                    pointId: point.Id, fieldKey: e.Field,
+                    attemptedValueJson: e.NewValueJson,
+                    currentValueJson: lastOwnerEdit.NewValueJson);
                 return new SyncEventResult(e.EventId, SyncOutcome.LosesLWW,
                     $"Owner already has a newer edit (last: {lastOwnerEdit.TimestampOriginal:O})");
             }
@@ -228,6 +244,10 @@ public sealed class EventApplier : IEventApplier
         if (lastCollabEdit is not null && e.TimestampOriginal <= lastCollabEdit.TimestampOriginal)
         {
             await RecordAuditAsync(e, ct);
+            RecordConflict(point.SurveyId, ConflictTypes.Lww, e,
+                pointId: point.Id, fieldKey: e.Field,
+                attemptedValueJson: e.NewValueJson,
+                currentValueJson: lastCollabEdit.NewValueJson);
             return new SyncEventResult(e.EventId, SyncOutcome.LosesLWW,
                 $"Older timestamp than current value (last: {lastCollabEdit.TimestampOriginal:O})");
         }
@@ -296,6 +316,57 @@ public sealed class EventApplier : IEventApplier
                 existing.UpdateValue(e.NewValueJson, e.AuthorId, e.TimestampOriginal);
             }
         }
+    }
+
+    /// <summary>
+    /// Crea un Conflict pendiente para que el usuario revise (US-19). El applier
+    /// SaveChanges al final del batch — no necesita un await aquí.
+    /// </summary>
+    private void RecordConflict(
+        Guid surveyId,
+        string type,
+        SyncEventDto e,
+        Guid? pointId,
+        string? fieldKey,
+        string? attemptedValueJson,
+        string? currentValueJson)
+    {
+        _db.Conflicts.Add(Conflict.Create(
+            id: Guid.NewGuid(),
+            surveyId: surveyId,
+            type: type,
+            eventId: e.EventId,
+            pointId: pointId,
+            fieldKey: fieldKey,
+            authorId: e.AuthorId,
+            attemptedValueJson: attemptedValueJson,
+            currentValueJson: currentValueJson,
+            attemptedAtUtc: e.TimestampOriginal));
+    }
+
+    /// <summary>
+    /// Lee el valor actual del campo desde el modelo central (Point o PointFieldValue),
+    /// para guardarlo como "current" en el Conflict — útil cuando el applier rechaza
+    /// la escritura por owner_precedence: el valor que prevalece está en BD, no en
+    /// el último audit del field (que podría ser del propio owner via campo built-in).
+    /// </summary>
+    private async Task<string?> ReadCurrentFieldValueAsync(Point point, string fieldKey, CancellationToken ct)
+    {
+        return fieldKey switch
+        {
+            "title" => System.Text.Json.JsonSerializer.Serialize(point.Title),
+            "description" => System.Text.Json.JsonSerializer.Serialize(point.Description),
+            "coords" => System.Text.Json.JsonSerializer.Serialize(new
+            {
+                latitude = point.Latitude,
+                longitude = point.Longitude,
+                accuracyM = point.AccuracyM,
+            }),
+            _ => await _db.PointFieldValues.AsNoTracking()
+                .Where(v => v.PointId == point.Id && v.FieldKey == fieldKey)
+                .Select(v => v.ValueJson)
+                .FirstOrDefaultAsync(ct),
+        };
     }
 
     private async Task RecordAuditAsync(SyncEventDto e, CancellationToken ct)

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Sgr.Domain.Audit;
+using Sgr.Domain.Conflicts;
 using Sgr.Domain.Identity;
 using Sgr.Domain.Photos;
 using Sgr.Domain.Points;
@@ -21,6 +22,7 @@ public class SgrDbContext : DbContext
     public DbSet<Photo> Photos => Set<Photo>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
     public DbSet<SystemConfigEntry> SystemConfig => Set<SystemConfigEntry>();
+    public DbSet<Conflict> Conflicts => Set<Conflict>();
 
     public SgrDbContext(DbContextOptions<SgrDbContext> options) : base(options) { }
 

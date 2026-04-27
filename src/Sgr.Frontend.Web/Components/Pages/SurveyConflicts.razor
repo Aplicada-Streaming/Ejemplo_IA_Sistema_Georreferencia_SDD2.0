@@ -1,0 +1,182 @@
+@page "/surveys/{SurveyId:guid}/conflicts"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = "admin_raiz,jefe_area")]
+@inject ISgrApiClient Api
+@inject ISnackbar Snackbar
+
+<PageTitle>SGR — Conflictos del relevamiento</PageTitle>
+
+<MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudText Typo="Typo.h4">Conflictos pendientes</MudText>
+    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.ArrowBack"
+               Href="@($"/surveys/{SurveyId}")">
+        Volver al relevamiento
+    </MudButton>
+</MudStack>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+}
+else
+{
+    <MudTabs Elevation="1" Rounded="true" PanelClass="pa-4" @bind-ActivePanelIndex="_activeTab">
+        <MudTabPanel Text="@($"Sobrescrituras ({CountByType("lww")})")" />
+        <MudTabPanel Text="@($"Precedencia dueño ({CountByType("owner_precedence")})")" />
+        <MudTabPanel Text="@($"Post-cierre ({CountByType("post_close")})")" />
+        <MudTabPanel Text="@($"Resueltos ({_resolved.Count})")" />
+    </MudTabs>
+
+    <div class="mt-3">
+        @if (CurrentList().Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Icon="@Icons.Material.Filled.CheckCircle">
+                No hay items en esta categoría.
+            </MudAlert>
+        }
+        else
+        {
+            @foreach (var c in CurrentList())
+            {
+                <MudPaper Class="pa-4 mb-3" Elevation="1">
+                    <MudStack Spacing="2">
+                        <MudText Typo="Typo.subtitle1">
+                            <strong>@TypeLabel(c.Type)</strong>
+                            @if (!string.IsNullOrEmpty(c.FieldKey))
+                            {
+                                <span> · campo <code>@c.FieldKey</code></span>
+                            }
+                            @if (c.PointId is not null)
+                            {
+                                <span> · punto @c.PointId.Value.ToString()[..8]</span>
+                            }
+                        </MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            Autor: @c.AuthorId.ToString()[..8] · @c.AttemptedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                        </MudText>
+
+                        <MudGrid Spacing="2">
+                            <MudItem xs="12" md="6">
+                                <MudPaper Class="pa-3" Elevation="0" Style="background:#fff5e6;">
+                                    <MudText Typo="Typo.caption">Valor intentado (perdido)</MudText>
+                                    <MudText Typo="Typo.body2" Style="font-family:monospace;">
+                                        @(c.AttemptedValueJson ?? "—")
+                                    </MudText>
+                                </MudPaper>
+                            </MudItem>
+                            <MudItem xs="12" md="6">
+                                <MudPaper Class="pa-3" Elevation="0" Style="background:#e8f5e9;">
+                                    <MudText Typo="Typo.caption">Valor actual</MudText>
+                                    <MudText Typo="Typo.body2" Style="font-family:monospace;">
+                                        @(c.CurrentValueJson ?? "—")
+                                    </MudText>
+                                </MudPaper>
+                            </MudItem>
+                        </MudGrid>
+
+                        @if (c.Status == "pendiente")
+                        {
+                            <MudStack Row Spacing="2">
+                                @if (c.Type != "post_close")
+                                {
+                                    <MudButton Variant="Variant.Filled" Color="Color.Warning"
+                                               StartIcon="@Icons.Material.Filled.Replay"
+                                               OnClick="@(() => ResolveAsync(c, "Revert"))" Disabled="@_busy">
+                                        Revertir al valor intentado
+                                    </MudButton>
+                                }
+                                <MudButton Variant="Variant.Outlined" Color="Color.Default"
+                                           StartIcon="@Icons.Material.Filled.Check"
+                                           OnClick="@(() => ResolveAsync(c, "KeepCurrent"))" Disabled="@_busy">
+                                    Mantener valor actual
+                                </MudButton>
+                            </MudStack>
+                        }
+                        else
+                        {
+                            <MudAlert Severity="Severity.Success" Dense="true">
+                                @StatusLabel(c.Status)
+                                @if (c.ResolvedAtUtc is not null)
+                                {
+                                    <span> el @c.ResolvedAtUtc.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</span>
+                                }
+                                @if (!string.IsNullOrEmpty(c.ResolutionNote))
+                                {
+                                    <div><small>@c.ResolutionNote</small></div>
+                                }
+                            </MudAlert>
+                        }
+                    </MudStack>
+                </MudPaper>
+            }
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public Guid SurveyId { get; set; }
+
+    private bool _loading = true;
+    private bool _busy;
+    private int _activeTab;
+    private List<ConflictDto> _pending = new();
+    private List<ConflictDto> _resolved = new();
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        try
+        {
+            var pending = await Api.ListConflictsAsync(SurveyId);
+            _pending = pending.ToList();
+            var resolved = await Api.ListConflictsAsync(SurveyId, status: "all");
+            _resolved = resolved.Where(c => c.Status != "pendiente").ToList();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"No pude cargar conflictos: {ex.Message}", Severity.Error);
+        }
+        finally { _loading = false; }
+    }
+
+    private List<ConflictDto> CurrentList() => _activeTab switch
+    {
+        0 => _pending.Where(c => c.Type == "lww").ToList(),
+        1 => _pending.Where(c => c.Type == "owner_precedence").ToList(),
+        2 => _pending.Where(c => c.Type == "post_close").ToList(),
+        3 => _resolved,
+        _ => new List<ConflictDto>(),
+    };
+
+    private int CountByType(string type) => _pending.Count(c => c.Type == type);
+
+    private async Task ResolveAsync(ConflictDto c, string action)
+    {
+        _busy = true;
+        try
+        {
+            await Api.ResolveConflictAsync(c.Id, action);
+            Snackbar.Add(action == "Revert" ? "Revertido." : "Marcado como revisado.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex) { Snackbar.Add($"No pude resolver: {ex.Message}", Severity.Error); }
+        finally { _busy = false; }
+    }
+
+    private static string TypeLabel(string type) => type switch
+    {
+        "lww" => "Sobrescritura por timestamp (LWW)",
+        "owner_precedence" => "Precedencia del dueño (RN-07)",
+        "post_close" => "Captura post-cierre (RN-08)",
+        _ => type,
+    };
+
+    private static string StatusLabel(string status) => status switch
+    {
+        "resuelto_revertido" => "Resuelto — revertido",
+        "resuelto_sin_cambio" => "Resuelto — sin cambio",
+        _ => status,
+    };
+}
