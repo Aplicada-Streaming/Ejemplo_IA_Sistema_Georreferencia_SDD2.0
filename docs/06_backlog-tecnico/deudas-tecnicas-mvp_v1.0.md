@@ -57,7 +57,7 @@ para que Sprint 11 los priorice contra bugs de estabilización antes del release
 
 | ID | Severidad | Descripción | Archivos clave |
 |---|---|---|---|
-| DT-S10.1 | 🟡 Media | **Selector field-by-field** en la fusión (CA-22.2 partial). Hoy el `kept` hereda todos los campos; el dropped pierde los valores que tenía y el kept no los pisa. UX más rica permitiría elegir, por cada campo divergente, si queda el de A o el de B. | src/Sgr.Modules.Sync/Application/IMergeCandidatesService.cs + MergeCandidates.razor |
+| DT-S10.1 | ✅ Sprint 11 | Selector field-by-field implementado: `MergeAsync(strategy, fieldChoices?)` acepta un dict (fieldKey → "a" \| "b") que sobreescribe campos del kept con el valor del lado elegido. Soporta built-in (title/description) y custom fields via PointFieldValues. UI: en cada card de candidato pendiente, las divergencias entre A y B muestran radio buttons. | src/Sgr.Modules.Sync/Application/IMergeCandidatesService.cs + MergeCandidates.razor |
 | DT-S10.2 | ✅ Sprint 11 (parcial) | Mini-mapa con ambos puntos (markers A/B + centro automático) en la card de cada candidato. Galerías de fotos lado a lado siguen pendientes — el patrón actual abre el `PhotoGalleryDialog` por cada punto, integrarlo en la card de fusión queda como UX nice-to-have. | src/Sgr.Frontend.Web/Components/Pages/MergeCandidates.razor |
 | DT-S10.3 | 🟢 Baja | `Photo.MoveToPoint()` en lugar de reflection para reasignar fotos del dropped al kept. Igual que DT-S7.1. | Mismo: src/Sgr.Domain/Photos/Photo.cs |
 | DT-S10.4 | 🟢 Baja | Detector RN-09 sólo se dispara en `point.created`. Si un punto se MUEVE a una zona donde había otro punto cercano (vía `coords` field_updated), no re-detecta. RN-09 lo menciona implícitamente; agregar hook en `ApplyPointFieldUpdatedAsync` cuando el field es `coords`. | src/Sgr.Modules.Sync/Application/IEventApplier.cs |
@@ -78,22 +78,22 @@ para que Sprint 11 los priorice contra bugs de estabilización antes del release
 ## Sugerencia de priorización para Sprint 11
 
 **Resueltas en Sprint 11**:
-- ✅ DT-X.1: CI pipeline GitHub Actions con solution filter sin MAUI (commit Sprint 11 #1)
+- ✅ DT-X.1: CI pipeline GitHub Actions con solution filter sin MAUI
 - ✅ DT-S8.1 + DT-S8.2: hot-swap storage activo (factory dinámico con cache TTL 30s)
 - ✅ DT-S9.1: post_close revert reabre survey + reaplica evento
-- ✅ DT-S10.2: mini-mapa lado a lado en pantalla de fusión (galerías de fotos siguen pendientes)
+- ✅ DT-S10.2: mini-mapa lado a lado en pantalla de fusión (galerías de fotos pendientes)
 - ✅ DT-S6.1: banner informacional para relevadores en SurveyDetail
+- ✅ DT-S10.1: selector field-by-field en la fusión (built-in + custom fields)
 
-**Pendientes priorizadas**:
-1. **DT-S10.1** (media): selector field-by-field en la fusión (el `kept` hereda todo).
-2. **DT-X.2** (media): tests E2E con SQL real via Testcontainers.
-3. **DT-X.3** (media): tests integración para adapters S3/FTP/SFTP.
-4. **DT-S9.2** (baja): notificación push post-sync (SignalR).
-5. **DT-S7.1 / DT-S10.3** (baja): `Photo.MoveToPoint()` limpio en lugar de reflection.
-6. **DT-S10.4** (baja): detector RN-09 también en `coords` field_updated.
-7. **DT-S8.3** (baja): DataProtection con keys persistidas para deploy multi-instancia.
-8. **DT-S3.1** (baja): docs menores con nomenclatura "modo móvil" residual.
-9. **DT-X.4** (baja): logging dashboard (Seq/ELK).
+**Pendientes priorizadas (todas baja-media para Sprint 12+)**:
+1. **DT-X.2** (media): tests E2E con SQL real via Testcontainers.
+2. **DT-X.3** (media): tests integración para adapters S3/FTP/SFTP.
+3. **DT-S9.2** (baja): notificación push post-sync (SignalR).
+4. **DT-S7.1 / DT-S10.3** (baja): `Photo.MoveToPoint()` limpio en lugar de reflection.
+5. **DT-S10.4** (baja): detector RN-09 también en `coords` field_updated.
+6. **DT-S8.3** (baja): DataProtection con keys persistidas para deploy multi-instancia.
+7. **DT-S3.1** (baja): docs menores con nomenclatura "modo móvil" residual.
+8. **DT-X.4** (baja): logging dashboard (Seq/ELK).
 
 ---
 

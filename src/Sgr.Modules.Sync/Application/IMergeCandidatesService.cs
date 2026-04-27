@@ -30,8 +30,20 @@ public interface IMergeCandidatesService
     Task<MergeCandidateDto> KeepSeparateAsync(
         Guid candidateId, CurrentUserContext actor, CancellationToken ct = default);
 
+    /// <summary>
+    /// Fusiona dos puntos según <paramref name="strategy"/> (centroid / keep_a / keep_b).
+    /// Si <paramref name="fieldChoices"/> está provisto, sobreescribe cada campo del kept
+    /// con el valor del punto elegido (DT-S10.1 selector field-by-field). Cada entrada es
+    /// (fieldKey, "a" | "b"); si un campo no está en el dict, el kept conserva su valor.
+    /// Soporta los campos built-in <c>title</c> y <c>description</c> del Point y los
+    /// custom fields persistidos en <c>PointFieldValues</c>.
+    /// </summary>
     Task<MergeCandidateDto> MergeAsync(
-        Guid candidateId, string strategy, CurrentUserContext actor, CancellationToken ct = default);
+        Guid candidateId,
+        string strategy,
+        IReadOnlyDictionary<string, string>? fieldChoices,
+        CurrentUserContext actor,
+        CancellationToken ct = default);
 }
 
 public sealed record MergeCandidateDto(
@@ -86,7 +98,11 @@ public sealed class MergeCandidatesService : IMergeCandidatesService
     }
 
     public async Task<MergeCandidateDto> MergeAsync(
-        Guid candidateId, string strategy, CurrentUserContext actor, CancellationToken ct = default)
+        Guid candidateId,
+        string strategy,
+        IReadOnlyDictionary<string, string>? fieldChoices,
+        CurrentUserContext actor,
+        CancellationToken ct = default)
     {
         if (!MergeStrategies.IsValid(strategy))
             throw new ArgumentException($"Strategy '{strategy}' inválida.");
@@ -100,6 +116,12 @@ public sealed class MergeCandidatesService : IMergeCandidatesService
             ?? throw new InvalidOperationException($"Point A {candidate.PointAId} no existe.");
         var pointB = await _db.Points.FirstOrDefaultAsync(p => p.Id == candidate.PointBId, ct)
             ?? throw new InvalidOperationException($"Point B {candidate.PointBId} no existe.");
+
+        // Pre-snapshot de los PointFieldValues de A y B para que ApplyFieldChoicesAsync
+        // pueda resolver el choice incluso después de que el move haya reasignado el
+        // PointFieldValue al kept (DT-S10.1).
+        var fieldSnapshotA = await SnapshotFieldValuesAsync(pointA.Id, ct);
+        var fieldSnapshotB = await SnapshotFieldValuesAsync(pointB.Id, ct);
 
         var (kept, dropped) = strategy switch
         {
@@ -149,6 +171,12 @@ public sealed class MergeCandidatesService : IMergeCandidatesService
             }
         }
 
+        // DT-S10.1: aplicar field-by-field choices usando el snapshot pre-mutación
+        // (los PointFieldValues del dropped ya fueron movidos/borrados arriba).
+        if (fieldChoices is { Count: > 0 })
+            await ApplyFieldChoicesAsync(
+                fieldChoices, kept, pointA, pointB, fieldSnapshotA, fieldSnapshotB, now, ct);
+
         // Soft-delete del dropped.
         dropped.SoftDelete(now);
 
@@ -183,6 +211,88 @@ public sealed class MergeCandidatesService : IMergeCandidatesService
         candidate.MarkMerged(kept.Id, strategy, actor.UserId, now);
         await _db.SaveChangesAsync(ct);
         return ToDto(candidate);
+    }
+
+    private async Task<Dictionary<string, string?>> SnapshotFieldValuesAsync(Guid pointId, CancellationToken ct)
+    {
+        var rows = await _db.PointFieldValues.AsNoTracking()
+            .Where(v => v.PointId == pointId)
+            .Select(v => new { v.FieldKey, v.ValueJson })
+            .ToListAsync(ct);
+        return rows.ToDictionary(r => r.FieldKey, r => r.ValueJson);
+    }
+
+    /// <summary>
+    /// Aplica el dict de choices al kept usando snapshots de PointFieldValues tomados antes
+    /// de la mutación. Para cada (fieldKey, "a"|"b"):
+    /// - Si fieldKey ∈ {title, description}: setea la propiedad built-in del kept con el
+    ///   valor del punto elegido (si la elección coincide con el kept, no-op).
+    /// - Si fieldKey es un custom field: lee del snapshot del lado elegido y upsertea
+    ///   en PointFieldValues del kept (ya tracked / agregado por el move previo).
+    /// </summary>
+    private async Task ApplyFieldChoicesAsync(
+        IReadOnlyDictionary<string, string> choices,
+        Sgr.Domain.Points.Point kept,
+        Sgr.Domain.Points.Point pointA,
+        Sgr.Domain.Points.Point pointB,
+        IReadOnlyDictionary<string, string?> snapshotA,
+        IReadOnlyDictionary<string, string?> snapshotB,
+        DateTime now,
+        CancellationToken ct)
+    {
+        foreach (var (fieldKey, choiceRaw) in choices)
+        {
+            var choice = choiceRaw?.Trim().ToLowerInvariant();
+            if (choice != "a" && choice != "b") continue;
+
+            var chosenPoint = choice == "a" ? pointA : pointB;
+            if (chosenPoint.Id == kept.Id) continue; // no-op: el kept ya tiene su propio valor
+
+            switch (fieldKey)
+            {
+                case "title":
+                    kept.UpdateField("title", chosenPoint.Title, now);
+                    break;
+                case "description":
+                    kept.UpdateField("description", chosenPoint.Description, now);
+                    break;
+                default:
+                    var snapshot = choice == "a" ? snapshotA : snapshotB;
+                    snapshot.TryGetValue(fieldKey, out var chosenValue);
+                    await UpsertCustomFieldOnKeptAsync(fieldKey, chosenValue, kept, now, ct);
+                    break;
+            }
+        }
+    }
+
+    private async Task UpsertCustomFieldOnKeptAsync(
+        string fieldKey,
+        string? chosenValue,
+        Sgr.Domain.Points.Point kept,
+        DateTime now,
+        CancellationToken ct)
+    {
+        // El field puede ya estar tracked (porque el move previo lo agregó del dropped),
+        // o ser uno que el kept tenía desde el principio. Buscamos primero en Local.
+        var keptValue = _db.PointFieldValues.Local
+            .FirstOrDefault(v => v.PointId == kept.Id && v.FieldKey == fieldKey)
+            ?? await _db.PointFieldValues
+                .FirstOrDefaultAsync(v => v.PointId == kept.Id && v.FieldKey == fieldKey, ct);
+
+        if (keptValue is null)
+        {
+            _db.PointFieldValues.Add(Sgr.Domain.Points.PointFieldValue.Create(
+                id: Guid.NewGuid(),
+                pointId: kept.Id,
+                fieldKey: fieldKey,
+                valueJson: chosenValue,
+                updatedBy: kept.CreatedBy,
+                updatedAt: now));
+        }
+        else
+        {
+            keptValue.UpdateValue(chosenValue, kept.CreatedBy, now);
+        }
     }
 
     private static MergeCandidateDto ToDto(MergeCandidate c) => new(

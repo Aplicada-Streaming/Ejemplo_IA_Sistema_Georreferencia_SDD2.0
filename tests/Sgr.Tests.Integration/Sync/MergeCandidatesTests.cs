@@ -189,6 +189,60 @@ public class MergeCandidatesTests : IClassFixture<SgrApiFactory>
         droppedPoint.IsDeleted.Should().BeTrue();
     }
 
+    [Fact(DisplayName = "DT-S10.1 — Merge keep_a con fieldChoices toma el title de B")]
+    public async Task DT_S10_1_field_choices_overrides_kept_value()
+    {
+        var (clientA, ownerId, surveyId) = await SetupSurveyAsync();
+        var collabA = Guid.NewGuid();
+        var collabB = Guid.NewGuid();
+        var t0 = DateTime.UtcNow.AddDays(-1);
+
+        var pa = Guid.NewGuid();
+        var pb = Guid.NewGuid();
+        // El create y el field_updated van en pushes separados para que EF flushee el
+        // create antes de que el field_updated lo busque por Id.
+        await PushAsync(clientA, new[] { NewPointCreated(pa, surveyId, collabA, 0m, 0m, t0) });
+        await PushAsync(clientA, new[]
+        {
+            new SyncEventDto(
+                EventId: Guid.NewGuid(), EntityType: "point", EntityId: pa,
+                EventType: "field_updated", Field: "title", OldValueJson: null,
+                NewValueJson: "\"Versión A\"",
+                AuthorId: collabA, Origin: "mobile_edit", DeviceId: "test",
+                TimestampOriginal: t0.AddMinutes(1)),
+        });
+        await PushAsync(clientA, new[] { NewPointCreated(pb, surveyId, collabB, 0.00006m, 0m, t0.AddHours(1)) });
+        await PushAsync(clientA, new[]
+        {
+            new SyncEventDto(
+                EventId: Guid.NewGuid(), EntityType: "point", EntityId: pb,
+                EventType: "field_updated", Field: "title", OldValueJson: null,
+                NewValueJson: "\"Versión B\"",
+                AuthorId: collabB, Origin: "mobile_edit", DeviceId: "test",
+                TimestampOriginal: t0.AddHours(1).AddMinutes(1)),
+        });
+
+        var jefeClient = await JefeClientAsync();
+        var candidates = await jefeClient.GetFromJsonAsync<List<MergeCandidateApiDto>>(
+            $"/api/v1/merge-candidates?surveyId={surveyId}");
+        var candidate = candidates!.Single();
+
+        // Estrategia keep_a, pero el title lo queremos de B.
+        var resp = await jefeClient.PostAsJsonAsync(
+            $"/api/v1/merge-candidates/{candidate.Id}/merge",
+            new
+            {
+                Strategy = "keep_a",
+                FieldChoices = new Dictionary<string, string> { ["title"] = "b" },
+            });
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<Sgr.Persistence.SgrDbContext>();
+        var keptPoint = db.Points.Single(p => p.Id == candidate.PointAId);
+        keptPoint.Title.Should().Be("Versión B");
+    }
+
     // ----- helpers -----
 
     private async Task<HttpClient> JefeClientAsync()

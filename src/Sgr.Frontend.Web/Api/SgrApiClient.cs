@@ -58,7 +58,11 @@ public interface ISgrApiClient
     Task<IReadOnlyList<MergeCandidateDto>> ListMergeCandidatesAsync(
         Guid? surveyId = null, string? status = null, CancellationToken ct = default);
     Task<MergeCandidateDto> KeepCandidatesSeparateAsync(Guid candidateId, CancellationToken ct = default);
-    Task<MergeCandidateDto> MergeCandidateAsync(Guid candidateId, string strategy, CancellationToken ct = default);
+    Task<MergeCandidateDto> MergeCandidateAsync(
+        Guid candidateId,
+        string strategy,
+        IReadOnlyDictionary<string, string>? fieldChoices = null,
+        CancellationToken ct = default);
 
     // Slice 8 / US-17 — config de storage activa (admin only)
     Task<StorageConfigDto?> GetStorageConfigAsync(CancellationToken ct = default);
@@ -371,12 +375,20 @@ public sealed class SgrApiClient : ISgrApiClient
             ?? throw new InvalidOperationException("Respuesta vacía.");
     }
 
-    public async Task<MergeCandidateDto> MergeCandidateAsync(Guid candidateId, string strategy, CancellationToken ct = default)
+    public async Task<MergeCandidateDto> MergeCandidateAsync(
+        Guid candidateId,
+        string strategy,
+        IReadOnlyDictionary<string, string>? fieldChoices = null,
+        CancellationToken ct = default)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post,
             $"/api/v1/merge-candidates/{candidateId}/merge")
         {
-            Content = JsonContent.Create(new { Strategy = strategy }),
+            Content = JsonContent.Create(new
+            {
+                Strategy = strategy,
+                FieldChoices = fieldChoices,
+            }),
         };
         AttachAuth(request);
         using var response = await _http.SendAsync(request, ct);

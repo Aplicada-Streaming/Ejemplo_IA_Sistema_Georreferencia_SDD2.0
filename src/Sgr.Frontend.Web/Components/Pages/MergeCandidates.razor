@@ -85,6 +85,41 @@ else
                             <LeafletMap Markers="@markers" Center="@center" Height="220px" InitialZoom="20" />
                         }
 
+                        @* DT-S10.1 — Selectores field-by-field para campos divergentes
+                           entre A y B. Solo aparecen los campos en los que A != B. *@
+                        @{
+                            var divergences = DivergencesFor(c);
+                            var choices = ChoicesFor(c);
+                        }
+                        @if (divergences.Count > 0 && c.Status == "pendiente")
+                        {
+                            <MudPaper Class="pa-3" Elevation="0" Style="background:#fafafa;">
+                                <MudText Typo="Typo.caption" Class="mb-2">
+                                    Campos divergentes — elegí qué valor conservar:
+                                </MudText>
+                                <MudStack Spacing="1">
+                                    @foreach (var d in divergences)
+                                    {
+                                        <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                                            <MudText Typo="Typo.body2" Style="min-width:120px;">
+                                                <strong>@d.Label</strong>
+                                            </MudText>
+                                            <MudRadioGroup T="string"
+                                                            Value="@(choices.TryGetValue(d.FieldKey, out var chosen) ? chosen : null)"
+                                                            ValueChanged="@(v => SetChoice(c.Id, d.FieldKey, v))">
+                                                <MudRadio Value="@("a")" Color="Color.Primary" Size="Size.Small">
+                                                    A: <span style="font-style:italic;">@(d.ValueA ?? "—")</span>
+                                                </MudRadio>
+                                                <MudRadio Value="@("b")" Color="Color.Primary" Size="Size.Small">
+                                                    B: <span style="font-style:italic;">@(d.ValueB ?? "—")</span>
+                                                </MudRadio>
+                                            </MudRadioGroup>
+                                        </MudStack>
+                                    }
+                                </MudStack>
+                            </MudPaper>
+                        }
+
                         @if (c.Status == "pendiente")
                         {
                             <MudStack Row Spacing="2" Wrap="Wrap.Wrap">
@@ -142,6 +177,9 @@ else
     private List<MergeCandidateDto> _pending = new();
     private List<MergeCandidateDto> _resolved = new();
     private Dictionary<Guid, PointDto> _pointsById = new();
+
+    // DT-S10.1: choices por candidato (candidateId → fieldKey → "a" | "b").
+    private readonly Dictionary<Guid, Dictionary<string, string>> _choicesByCandidate = new();
 
     protected override Task OnInitializedAsync() => LoadAsync();
 
@@ -202,12 +240,49 @@ else
         _busy = true;
         try
         {
-            await Api.MergeCandidateAsync(c.Id, strategy);
+            var choices = _choicesByCandidate.TryGetValue(c.Id, out var map) && map.Count > 0
+                ? map
+                : null;
+            await Api.MergeCandidateAsync(c.Id, strategy, choices);
             Snackbar.Add($"Fusionado ({strategy}).", Severity.Success);
+            _choicesByCandidate.Remove(c.Id);
             await LoadAsync();
         }
         catch (Exception ex) { Snackbar.Add($"No pude fusionar: {ex.Message}", Severity.Error); }
         finally { _busy = false; }
+    }
+
+    private record FieldDivergence(string FieldKey, string Label, string? ValueA, string? ValueB);
+
+    private List<FieldDivergence> DivergencesFor(MergeCandidateDto c)
+    {
+        var pa = PointFor(c.PointAId);
+        var pb = PointFor(c.PointBId);
+        var divs = new List<FieldDivergence>();
+        if (pa is null || pb is null) return divs;
+
+        if (!StringEq(pa.Title, pb.Title))
+            divs.Add(new("title", "Título", pa.Title, pb.Title));
+        if (!StringEq(pa.Description, pb.Description))
+            divs.Add(new("description", "Descripción", pa.Description, pb.Description));
+        return divs;
+    }
+
+    private static bool StringEq(string? x, string? y) =>
+        (string.IsNullOrEmpty(x) && string.IsNullOrEmpty(y)) || x == y;
+
+    private Dictionary<string, string> ChoicesFor(MergeCandidateDto c) =>
+        _choicesByCandidate.TryGetValue(c.Id, out var map) ? map : new();
+
+    private void SetChoice(Guid candidateId, string fieldKey, string? choice)
+    {
+        if (!_choicesByCandidate.TryGetValue(candidateId, out var map))
+        {
+            map = new Dictionary<string, string>();
+            _choicesByCandidate[candidateId] = map;
+        }
+        if (string.IsNullOrEmpty(choice)) map.Remove(fieldKey);
+        else map[fieldKey] = choice;
     }
 
     private async Task KeepSeparateAsync(MergeCandidateDto c)

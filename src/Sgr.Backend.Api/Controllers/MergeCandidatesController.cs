@@ -43,7 +43,9 @@ public sealed class MergeCandidatesController : ControllerBase
     /// <summary>
     /// Fusiona el par. <c>strategy</c>: <c>centroid</c> | <c>keep_a</c> | <c>keep_b</c>.
     /// El kept conserva sus datos; las fotos del dropped se le mueven; el dropped queda
-    /// soft-deleted; se registra AuditEvent <c>merged</c>.
+    /// soft-deleted; se registra AuditEvent <c>merged</c>. Opcionalmente, <c>fieldChoices</c>
+    /// permite override field-by-field (DT-S10.1): cada entrada (fieldKey, "a" | "b")
+    /// fuerza el valor del lado elegido aunque difiera de la strategy general.
     /// </summary>
     [HttpPost("{id:guid}/merge")]
     [ProducesResponseType(typeof(MergeCandidateDto), StatusCodes.Status200OK)]
@@ -54,7 +56,7 @@ public sealed class MergeCandidatesController : ControllerBase
         CancellationToken ct)
     {
         var actor = CurrentUserAccessor.FromPrincipal(User);
-        var dto = await _candidates.MergeAsync(id, body.Strategy, actor, ct);
+        var dto = await _candidates.MergeAsync(id, body.Strategy, body.FieldChoices, actor, ct);
         return Ok(dto);
     }
 }
@@ -64,4 +66,11 @@ public sealed class MergeRequestDto
     /// <summary>"centroid" | "keep_a" | "keep_b"</summary>
     [Required, MaxLength(16)]
     public string Strategy { get; set; } = "centroid";
+
+    /// <summary>
+    /// Opcional. Map fieldKey → "a" | "b". Cada entrada fuerza el valor del punto
+    /// indicado para ese campo, sobreescribiendo lo que dejó la strategy general.
+    /// Soporta campos built-in (<c>title</c>, <c>description</c>) y custom fields.
+    /// </summary>
+    public Dictionary<string, string>? FieldChoices { get; set; }
 }
