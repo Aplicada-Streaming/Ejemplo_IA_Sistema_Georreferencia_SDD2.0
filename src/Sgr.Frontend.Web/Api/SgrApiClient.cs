@@ -49,6 +49,11 @@ public interface ISgrApiClient
     Task UpdateTemplateCaptureParamsAsync(Guid versionId, string captureParamsJson, CancellationToken ct = default);
     Task PublishTemplateVersionAsync(Guid versionId, CancellationToken ct = default);
 
+    // Slice 8 / US-17 — config de storage activa (admin only)
+    Task<StorageConfigDto?> GetStorageConfigAsync(CancellationToken ct = default);
+    Task<StorageConfigDto> SaveStorageConfigAsync(StorageConfigDto config, CancellationToken ct = default);
+    Task<StorageTestResultDto> TestStorageConfigAsync(StorageConfigDto config, CancellationToken ct = default);
+
     // Slice 7 / US-15 + US-16 — carga lote web con EXIF + cola pendientes geo
     Task<ManualUploadResultDto> ManualUploadAsync(
         Guid surveyId,
@@ -322,6 +327,47 @@ public sealed class SgrApiClient : ISgrApiClient
             throw await BuildApiExceptionAsync(response, "No pude listar los valores del punto.", ct);
         return await response.Content.ReadFromJsonAsync<IReadOnlyList<PointFieldValueDto>>(cancellationToken: ct)
             ?? Array.Empty<PointFieldValueDto>();
+    }
+
+    // ───────── Slice 8 / US-17 — config storage ─────────
+
+    public async Task<StorageConfigDto?> GetStorageConfigAsync(CancellationToken ct = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/system-config/storage");
+        AttachAuth(request);
+        using var response = await _http.SendAsync(request, ct);
+        if (response.StatusCode == HttpStatusCode.NoContent) return null;
+        if (!response.IsSuccessStatusCode)
+            throw await BuildApiExceptionAsync(response, "No pude obtener la config de storage.", ct);
+        return await response.Content.ReadFromJsonAsync<StorageConfigDto>(cancellationToken: ct);
+    }
+
+    public async Task<StorageConfigDto> SaveStorageConfigAsync(StorageConfigDto config, CancellationToken ct = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/system-config/storage")
+        {
+            Content = JsonContent.Create(config),
+        };
+        AttachAuth(request);
+        using var response = await _http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+            throw await BuildApiExceptionAsync(response, "No pude guardar la config.", ct);
+        return await response.Content.ReadFromJsonAsync<StorageConfigDto>(cancellationToken: ct)
+            ?? throw new InvalidOperationException("Respuesta vacía.");
+    }
+
+    public async Task<StorageTestResultDto> TestStorageConfigAsync(StorageConfigDto config, CancellationToken ct = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/system-config/storage/test")
+        {
+            Content = JsonContent.Create(config),
+        };
+        AttachAuth(request);
+        using var response = await _http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+            throw await BuildApiExceptionAsync(response, "No pude testear la config.", ct);
+        return await response.Content.ReadFromJsonAsync<StorageTestResultDto>(cancellationToken: ct)
+            ?? throw new InvalidOperationException("Respuesta vacía.");
     }
 
     // ───────── Slice 7 / US-15 + US-16 — carga lote + cola pendiente ─────────
@@ -660,3 +706,61 @@ public sealed record GeoResolveResultDto(
     Guid PhotoId,
     Guid PointId,
     bool PointWasCreated);
+
+// ───────── Slice 8 / US-17 — storage config ─────────
+// Clases mutables (no records) para que MudBlazor @bind-Value pueda escribir directo.
+
+public sealed class StorageConfigDto
+{
+    public string Adapter { get; set; } = "local";
+    public StorageAdapterConfigDto Config { get; set; } = new();
+}
+
+public sealed class StorageAdapterConfigDto
+{
+    public LocalConfigDto? Local { get; set; }
+    public S3ConfigDto? S3 { get; set; }
+    public FtpConfigDto? Ftp { get; set; }
+    public SftpConfigDto? Sftp { get; set; }
+}
+
+public sealed class LocalConfigDto
+{
+    public string RootPath { get; set; } = "";
+}
+
+public sealed class S3ConfigDto
+{
+    public string BucketName { get; set; } = "";
+    public string Region { get; set; } = "us-east-1";
+    public string AccessKey { get; set; } = "";
+    public string SecretKey { get; set; } = "";
+    public string? ServiceUrl { get; set; }
+    public bool ForcePathStyle { get; set; }
+}
+
+public sealed class FtpConfigDto
+{
+    public string Host { get; set; } = "";
+    public int Port { get; set; } = 21;
+    public string Username { get; set; } = "";
+    public string Password { get; set; } = "";
+    public string RemoteRoot { get; set; } = "/";
+    public bool UseTls { get; set; }
+}
+
+public sealed class SftpConfigDto
+{
+    public string Host { get; set; } = "";
+    public int Port { get; set; } = 22;
+    public string Username { get; set; } = "";
+    public string? Password { get; set; }
+    public string? PrivateKeyPath { get; set; }
+    public string? PrivateKeyPassphrase { get; set; }
+    public string RemoteRoot { get; set; } = "/";
+}
+
+public sealed record StorageTestResultDto(
+    bool Success,
+    string Message,
+    long? RoundTripMs);

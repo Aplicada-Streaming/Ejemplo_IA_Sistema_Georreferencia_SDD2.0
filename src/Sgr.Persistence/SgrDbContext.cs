@@ -4,6 +4,7 @@ using Sgr.Domain.Identity;
 using Sgr.Domain.Photos;
 using Sgr.Domain.Points;
 using Sgr.Domain.Surveys;
+using Sgr.Domain.SystemConfig;
 using Sgr.Domain.Templates;
 
 namespace Sgr.Persistence;
@@ -19,6 +20,7 @@ public class SgrDbContext : DbContext
     public DbSet<PointFieldValue> PointFieldValues => Set<PointFieldValue>();
     public DbSet<Photo> Photos => Set<Photo>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
+    public DbSet<SystemConfigEntry> SystemConfig => Set<SystemConfigEntry>();
 
     public SgrDbContext(DbContextOptions<SgrDbContext> options) : base(options) { }
 

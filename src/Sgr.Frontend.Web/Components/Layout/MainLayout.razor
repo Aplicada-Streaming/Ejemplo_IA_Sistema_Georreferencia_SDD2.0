@@ -53,6 +53,13 @@
                             </MudNavLink>
                         </Authorized>
                     </AuthorizeView>
+                    <AuthorizeView Roles="admin_raiz" Context="admin">
+                        <Authorized>
+                            <MudNavLink Href="/admin/storage" Icon="@Icons.Material.Filled.Storage">
+                                Storage
+                            </MudNavLink>
+                        </Authorized>
+                    </AuthorizeView>
                 </MudNavMenu>
             </MudDrawer>
         </Authorized>

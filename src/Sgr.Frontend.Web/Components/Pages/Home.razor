@@ -3,6 +3,7 @@
 @attribute [Authorize]
 @inject ISgrApiClient Api
 @inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthState
 
 <PageTitle>SGR — Dashboard</PageTitle>
 
@@ -118,6 +119,23 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // CA-17.1 — admin sin config de storage → redirige al wizard al primer login.
+        // Resto de roles no ven la config de storage; si la GET diera 403 lo silenciamos.
+        var auth = await AuthState.GetAuthenticationStateAsync();
+        if (auth.User.IsInRole("admin_raiz"))
+        {
+            try
+            {
+                var storageCfg = await Api.GetStorageConfigAsync();
+                if (storageCfg is null)
+                {
+                    Nav.NavigateTo("/admin/storage", forceLoad: false);
+                    return;
+                }
+            }
+            catch { /* fallback al dashboard */ }
+        }
+
         try { _summary = await Api.GetReportSummaryAsync(); }
         catch (Exception ex) { _error = $"No pude cargar el resumen: {ex.Message}"; }
         finally { _loading = false; }

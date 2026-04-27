@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sgr.Domain.Photos;
 using Sgr.Modules.Storage.Adapters;
+using Sgr.Modules.Storage.Configuration;
 using Sgr.Modules.Storage.Imaging;
 
 namespace Sgr.Modules.Storage;
@@ -34,6 +35,10 @@ public static class ServiceCollectionExtensions
 
         // Slice 7 / US-15 — lectura de EXIF para subida en lote desde web.
         services.AddSingleton<IExifReader, MetadataExtractorExifReader>();
+
+        // Slice 8 / US-17 — config de storage persistida con cifrado de credenciales.
+        services.AddDataProtection();
+        services.AddScoped<IStorageConfigService, StorageConfigService>();
 
         return services;
     }

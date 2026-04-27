@@ -1,0 +1,195 @@
+@page "/admin/storage"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = "admin_raiz")]
+@inject ISgrApiClient Api
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>SGR — Configurar storage</PageTitle>
+
+<MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudText Typo="Typo.h4">Configuración de almacenamiento</MudText>
+    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Home" Href="/">Dashboard</MudButton>
+</MudStack>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+}
+else
+{
+    <MudPaper Class="pa-6" Elevation="2">
+        <MudStack Spacing="4">
+            @if (_existing is null)
+            {
+                <MudAlert Severity="Severity.Warning" Icon="@Icons.Material.Filled.Warning">
+                    El almacenamiento todavía no fue configurado. Tras guardar el deploy puede requerir
+                    un reinicio para que las subidas de fotos usen el nuevo adapter.
+                </MudAlert>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Info">
+                    Adapter actual: <strong>@_existing.Adapter</strong>. Modificá los campos y "Test"
+                    antes de guardar. Las credenciales se mantienen ocultas con <code>***</code>.
+                </MudAlert>
+            }
+
+            @* Step 1 — adapter *@
+            <MudSelect T="string" @bind-Value="_adapter" Label="Tipo de storage" Variant="Variant.Outlined">
+                <MudSelectItem Value="@("local")">Local (filesystem)</MudSelectItem>
+                <MudSelectItem Value="@("s3")">Amazon S3 / compatible (MinIO)</MudSelectItem>
+                <MudSelectItem Value="@("ftp")">FTP / FTPS</MudSelectItem>
+                <MudSelectItem Value="@("sftp")">SFTP (SSH)</MudSelectItem>
+            </MudSelect>
+
+            @* Step 2 — config del adapter elegido *@
+            @if (_adapter == "local")
+            {
+                <MudTextField @bind-Value="_local.RootPath" Label="Carpeta raíz" Required="true"
+                              Variant="Variant.Outlined"
+                              HelperText="Ruta absoluta accesible por el proceso del backend. Se crea si no existe." />
+            }
+            else if (_adapter == "s3")
+            {
+                <MudGrid Spacing="2">
+                    <MudItem xs="12" md="6"><MudTextField @bind-Value="_s3.BucketName" Label="Bucket" Required="true" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="12" md="6"><MudTextField @bind-Value="_s3.Region" Label="Región" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="12" md="6"><MudTextField @bind-Value="_s3.AccessKey" Label="Access Key" Required="true" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="12" md="6"><MudTextField @bind-Value="_s3.SecretKey" Label="Secret Key" Required="true" Variant="Variant.Outlined" InputType="InputType.Password" /></MudItem>
+                    <MudItem xs="12" md="9"><MudTextField @bind-Value="_s3.ServiceUrl" Label="Service URL (opcional, MinIO)" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="12" md="3"><MudCheckBox T="bool" @bind-Value="_s3.ForcePathStyle" Label="Force path style" /></MudItem>
+                </MudGrid>
+            }
+            else if (_adapter == "ftp")
+            {
+                <MudGrid Spacing="2">
+                    <MudItem xs="9"><MudTextField @bind-Value="_ftp.Host" Label="Host" Required="true" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="3"><MudNumericField T="int" @bind-Value="_ftp.Port" Label="Puerto" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="6"><MudTextField @bind-Value="_ftp.Username" Label="Usuario" Required="true" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="6"><MudTextField @bind-Value="_ftp.Password" Label="Password" Required="true" Variant="Variant.Outlined" InputType="InputType.Password" /></MudItem>
+                    <MudItem xs="9"><MudTextField @bind-Value="_ftp.RemoteRoot" Label="Carpeta remota raíz" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="3"><MudCheckBox T="bool" @bind-Value="_ftp.UseTls" Label="Usar TLS" /></MudItem>
+                </MudGrid>
+            }
+            else if (_adapter == "sftp")
+            {
+                <MudGrid Spacing="2">
+                    <MudItem xs="9"><MudTextField @bind-Value="_sftp.Host" Label="Host" Required="true" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="3"><MudNumericField T="int" @bind-Value="_sftp.Port" Label="Puerto" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="6"><MudTextField @bind-Value="_sftp.Username" Label="Usuario" Required="true" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="6"><MudTextField @bind-Value="_sftp.Password" Label="Password (o vacío si usás llave)" Variant="Variant.Outlined" InputType="InputType.Password" /></MudItem>
+                    <MudItem xs="9"><MudTextField @bind-Value="_sftp.PrivateKeyPath" Label="Path llave privada (opcional)" Variant="Variant.Outlined" /></MudItem>
+                    <MudItem xs="3"><MudTextField @bind-Value="_sftp.PrivateKeyPassphrase" Label="Passphrase" Variant="Variant.Outlined" InputType="InputType.Password" /></MudItem>
+                    <MudItem xs="12"><MudTextField @bind-Value="_sftp.RemoteRoot" Label="Carpeta remota raíz" Variant="Variant.Outlined" /></MudItem>
+                </MudGrid>
+            }
+
+            @* Step 3 — test result *@
+            @if (_testResult is not null)
+            {
+                <MudAlert Severity="@(_testResult.Success ? Severity.Success : Severity.Error)"
+                          Icon="@(_testResult.Success ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Error)">
+                    @_testResult.Message
+                    @if (_testResult.RoundTripMs is not null)
+                    {
+                        <span> · @_testResult.RoundTripMs ms</span>
+                    }
+                </MudAlert>
+            }
+
+            @* Acciones *@
+            <MudStack Row Spacing="2">
+                <MudButton Variant="Variant.Outlined" Color="Color.Default"
+                           StartIcon="@Icons.Material.Filled.NetworkCheck"
+                           OnClick="TestAsync" Disabled="@_busy">
+                    Probar conexión
+                </MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Save"
+                           OnClick="SaveAsync"
+                           Disabled="@(_busy || _testResult is null || !_testResult.Success)">
+                    Guardar configuración
+                </MudButton>
+            </MudStack>
+        </MudStack>
+    </MudPaper>
+}
+
+@code {
+    private bool _loading = true;
+    private bool _busy;
+    private string _adapter = "local";
+    private LocalConfigDto _local = new() { RootPath = "/var/sgr/photos" };
+    private S3ConfigDto _s3 = new();
+    private FtpConfigDto _ftp = new();
+    private SftpConfigDto _sftp = new();
+    private StorageConfigDto? _existing;
+    private StorageTestResultDto? _testResult;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _existing = await Api.GetStorageConfigAsync();
+            if (_existing is not null) HydrateFromExisting(_existing);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"No pude cargar la config: {ex.Message}", Severity.Warning);
+        }
+        finally { _loading = false; }
+    }
+
+    private void HydrateFromExisting(StorageConfigDto cfg)
+    {
+        _adapter = cfg.Adapter;
+        if (cfg.Config.Local is not null) _local = cfg.Config.Local;
+        if (cfg.Config.S3 is not null) _s3 = cfg.Config.S3;
+        if (cfg.Config.Ftp is not null) _ftp = cfg.Config.Ftp;
+        if (cfg.Config.Sftp is not null) _sftp = cfg.Config.Sftp;
+    }
+
+    private StorageConfigDto BuildDto() => new()
+    {
+        Adapter = _adapter,
+        Config = new StorageAdapterConfigDto
+        {
+            Local = _adapter == "local" ? _local : null,
+            S3 = _adapter == "s3" ? _s3 : null,
+            Ftp = _adapter == "ftp" ? _ftp : null,
+            Sftp = _adapter == "sftp" ? _sftp : null,
+        },
+    };
+
+    private async Task TestAsync()
+    {
+        _busy = true;
+        _testResult = null;
+        try
+        {
+            _testResult = await Api.TestStorageConfigAsync(BuildDto());
+        }
+        catch (Exception ex)
+        {
+            _testResult = new StorageTestResultDto(false, ex.Message, null);
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task SaveAsync()
+    {
+        _busy = true;
+        try
+        {
+            await Api.SaveStorageConfigAsync(BuildDto());
+            Snackbar.Add("Configuración guardada. Reiniciá el backend para que las subidas usen el nuevo adapter.", Severity.Success);
+            Nav.NavigateTo("/");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"No pude guardar: {ex.Message}", Severity.Error);
+        }
+        finally { _busy = false; }
+    }
+}
