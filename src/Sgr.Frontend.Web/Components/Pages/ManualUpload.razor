@@ -1,0 +1,123 @@
+@page "/surveys/{SurveyId:guid}/manual-upload"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = "admin_raiz,jefe_area,relevador")]
+@inject ISgrApiClient Api
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>SGR — Subir lote de fotos</PageTitle>
+
+<MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudText Typo="Typo.h4">Subir fotos al relevamiento</MudText>
+    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.ArrowBack"
+               Href="@($"/surveys/{SurveyId}")">
+        Volver al relevamiento
+    </MudButton>
+</MudStack>
+
+<MudPaper Class="pa-6 mb-4" Elevation="2">
+    <MudStack Spacing="3">
+        <MudSelect T="string" @bind-Value="_mode" Label="Modo de agrupación" Variant="Variant.Outlined">
+            <MudSelectItem Value="@("Recorrido")">Recorrido — agrupa fotos cercanas (radio del template)</MudSelectItem>
+            <MudSelectItem Value="@("Detenido")">Detenido — todas al mismo punto (centroide del lote)</MudSelectItem>
+            <MudSelectItem Value="@("UnaPorFoto")">Una por foto — cada foto crea su punto</MudSelectItem>
+        </MudSelect>
+
+        <MudFileUpload T="IReadOnlyList<IBrowserFile>" FilesChanged="OnFilesChanged"
+                       MaximumFileCount="100"
+                       Accept=".jpg,.jpeg,.png,image/*">
+            <ActivatorContent>
+                <MudButton HtmlTag="label" Variant="Variant.Filled" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.CloudUpload">
+                    Elegir fotos del lote
+                </MudButton>
+            </ActivatorContent>
+        </MudFileUpload>
+
+        @if (_files.Count > 0)
+        {
+            <MudText Typo="Typo.body2">@_files.Count archivo(s) listo(s) para subir.</MudText>
+            <MudStack Row Spacing="2">
+                <MudButton Variant="Variant.Filled" Color="Color.Success"
+                           StartIcon="@Icons.Material.Filled.Send"
+                           OnClick="UploadAsync" Disabled="@_busy">
+                    @(_busy ? "Subiendo…" : "Subir lote")
+                </MudButton>
+                <MudButton Variant="Variant.Outlined" Color="Color.Default"
+                           OnClick="@(() => { _files.Clear(); _result = null; })" Disabled="@_busy">
+                    Limpiar
+                </MudButton>
+            </MudStack>
+        }
+
+        @if (_busy)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+        }
+
+        @if (_result is not null)
+        {
+            <MudAlert Severity="Severity.Success">
+                Subida completa: @_result.FilesReceived archivos · @_result.PointsCreated puntos creados ·
+                @_result.PhotosWithGps con GPS · @_result.PhotosPendingGeo pendientes de georreferenciar.
+            </MudAlert>
+            @if (_result.PhotosPendingGeo > 0)
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Warning"
+                           StartIcon="@Icons.Material.Filled.MyLocation"
+                           Href="@($"/surveys/{SurveyId}/pending-geo")">
+                    Resolver @_result.PhotosPendingGeo foto(s) pendientes
+                </MudButton>
+            }
+        }
+    </MudStack>
+</MudPaper>
+
+<MudAlert Severity="Severity.Info" Icon="@Icons.Material.Filled.Info">
+    <strong>Recorrido:</strong> agrupa fotos por proximidad espacial (radio del template) y temporal (5 min).
+    <strong>Detenido:</strong> centroide. <strong>Una por foto:</strong> sin agrupar. Las fotos sin EXIF
+    quedan en la cola "Pendientes de georreferenciar" para resolver manualmente.
+</MudAlert>
+
+@code {
+    [Parameter] public Guid SurveyId { get; set; }
+
+    private string _mode = "Recorrido";
+    private bool _busy;
+    private List<(string name, string contentType, byte[] bytes)> _files = new();
+    private ManualUploadResultDto? _result;
+
+    private async Task OnFilesChanged(IReadOnlyList<IBrowserFile> files)
+    {
+        _files.Clear();
+        // Buffereamos en memoria. Para 100 fotos JPEG (~100 MB total) está dentro del razonable
+        // del Blazor Server. Si se vuelve un cuello, conviene streamear directo al backend.
+        const long MaxBytes = 100 * 1024 * 1024; // 100 MB por foto, hard cap defensivo
+        foreach (var f in files)
+        {
+            using var ms = new MemoryStream();
+            await using var stream = f.OpenReadStream(MaxBytes);
+            await stream.CopyToAsync(ms);
+            _files.Add((f.Name, string.IsNullOrEmpty(f.ContentType) ? "image/jpeg" : f.ContentType, ms.ToArray()));
+        }
+        StateHasChanged();
+    }
+
+    private async Task UploadAsync()
+    {
+        if (_files.Count == 0) return;
+        _busy = true;
+        _result = null;
+        try
+        {
+            _result = await Api.ManualUploadAsync(SurveyId, _mode, _files);
+            Snackbar.Add($"Subidas {_result.FilesReceived} fotos.", Severity.Success);
+            _files.Clear();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error en la subida: {ex.Message}", Severity.Error);
+        }
+        finally { _busy = false; }
+    }
+}

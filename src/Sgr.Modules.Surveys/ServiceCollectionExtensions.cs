@@ -14,6 +14,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ICloseSurveyService, CloseSurveyService>();
         services.AddScoped<IExportSurveyService, ExportSurveyService>();
         services.AddScoped<IReportSummaryService, ReportSummaryService>();
+        services.AddScoped<IManualUploadService, ManualUploadService>();
+        services.AddScoped<IPendingGeoPhotoService, PendingGeoPhotoService>();
         return services;
     }
 }

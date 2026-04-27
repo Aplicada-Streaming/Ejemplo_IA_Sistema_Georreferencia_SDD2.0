@@ -322,9 +322,10 @@ public sealed class ExportSurveyService : IExportSurveyService
         var photoCounts = new Dictionary<Guid, int>();
         if (pointIds.Count > 0)
         {
+            // PointId es nullable (Slice 7) — filtramos las pendientes y descartamos null en el group.
             var counts = await _db.Photos.AsNoTracking()
-                .Where(p => pointIds.Contains(p.PointId) && !p.IsDeleted)
-                .GroupBy(p => p.PointId)
+                .Where(p => p.PointId != null && pointIds.Contains(p.PointId.Value) && !p.IsDeleted)
+                .GroupBy(p => p.PointId!.Value)
                 .Select(g => new { PointId = g.Key, Count = g.Count() })
                 .ToListAsync(ct);
             foreach (var c in counts)

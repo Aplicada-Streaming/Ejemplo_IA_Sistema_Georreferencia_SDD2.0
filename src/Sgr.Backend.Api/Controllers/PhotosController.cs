@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -5,6 +6,7 @@ using Sgr.Domain.Audit;
 using Sgr.Domain.Common;
 using Sgr.Domain.Photos;
 using Sgr.Modules.Storage;
+using Sgr.Modules.Surveys.Application;
 using Sgr.Persistence;
 
 namespace Sgr.Backend.Api.Controllers;
@@ -17,15 +19,18 @@ public sealed class PhotosController : ControllerBase
     private readonly SgrDbContext _db;
     private readonly IPhotoStorageAdapterFactory _factory;
     private readonly IDateTimeProvider _clock;
+    private readonly IPendingGeoPhotoService _pendingGeo;
 
     public PhotosController(
         SgrDbContext db,
         IPhotoStorageAdapterFactory factory,
-        IDateTimeProvider clock)
+        IDateTimeProvider clock,
+        IPendingGeoPhotoService pendingGeo)
     {
         _db = db;
         _factory = factory;
         _clock = clock;
+        _pendingGeo = pendingGeo;
     }
 
     /// <summary>
@@ -146,12 +151,41 @@ public sealed class PhotosController : ControllerBase
         return File(stream, "application/octet-stream", photo.AdapterRef.Split('/').LastOrDefault() ?? "photo.bin");
     }
 
+    /// <summary>
+    /// US-16 — Resuelve la georreferencia manual de una foto pendiente. Si las coordenadas
+    /// caen dentro del radio del modo recorrido respecto a algún Punto del survey, se asocia
+    /// a ese Punto; si no, se crea uno nuevo.
+    /// </summary>
+    [HttpPost("{id:guid}/geo-resolve")]
+    [ProducesResponseType(typeof(GeoResolveResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<GeoResolveResult>> GeoResolve(
+        Guid id,
+        [FromBody] GeoResolveDto body,
+        CancellationToken ct)
+    {
+        var current = CurrentUserAccessor.FromPrincipal(User);
+        var actor = new CurrentUserContext(current.UserId, current.Role, current.AreaId);
+        var result = await _pendingGeo.ResolveAsync(id, body.Latitude, body.Longitude, actor, ct);
+        return Ok(result);
+    }
+
     private static ProblemDetails Problem(int status, string title, string detail) => new()
     {
         Status = status,
         Title = title,
         Detail = detail,
     };
+}
+
+public sealed class GeoResolveDto
+{
+    [Range(-90, 90)]
+    public decimal Latitude { get; set; }
+
+    [Range(-180, 180)]
+    public decimal Longitude { get; set; }
 }
 
 public sealed class PhotoUploadForm
@@ -178,7 +212,7 @@ public sealed record PhotoCreatedDto(
 /// </summary>
 public sealed record PhotoSummaryDto(
     Guid Id,
-    Guid PointId,
+    Guid? PointId,
     string AdapterName,
     long SizeBytes,
     string ContentHash,

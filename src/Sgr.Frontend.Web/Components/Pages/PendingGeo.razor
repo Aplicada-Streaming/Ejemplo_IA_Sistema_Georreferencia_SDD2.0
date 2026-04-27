@@ -1,0 +1,166 @@
+@page "/surveys/{SurveyId:guid}/pending-geo"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = "admin_raiz,jefe_area,relevador")]
+@inject ISgrApiClient Api
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>SGR — Pendientes de georreferenciar</PageTitle>
+
+<MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudText Typo="Typo.h4">Fotos pendientes de georreferenciar</MudText>
+    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.ArrowBack"
+               Href="@($"/surveys/{SurveyId}")">
+        Volver al relevamiento
+    </MudButton>
+</MudStack>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+}
+else if (_pending.Count == 0)
+{
+    <MudAlert Severity="Severity.Success" Icon="@Icons.Material.Filled.CheckCircle">
+        No hay fotos pendientes de georreferenciar.
+    </MudAlert>
+}
+else
+{
+    <MudGrid Spacing="2">
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-3" Style="height:75vh; overflow:auto;" Elevation="1">
+                <MudText Typo="Typo.h6" Class="mb-2">@_pending.Count pendiente(s)</MudText>
+                @foreach (var p in _pending)
+                {
+                    <MudPaper Class="pa-2 mb-2"
+                              Style="@($"cursor:pointer; border-left: 4px solid {(p.Id == _selectedId ? "#1976d2" : "transparent")};")"
+                              Elevation="@(p.Id == _selectedId ? 3 : 0)"
+                              @onclick="() => SelectAsync(p.Id)">
+                        <MudText Typo="Typo.body2">@(p.OriginalFileName ?? p.Id.ToString()[..8])</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            @p.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm") · @(p.SizeBytes / 1024) KB
+                        </MudText>
+                    </MudPaper>
+                }
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="8">
+            <MudPaper Class="pa-3 mb-3" Elevation="1">
+                <MudText Typo="Typo.body2" Class="mb-2">
+                    Hacé click en el mapa para fijar la ubicación, o ingresá lat/lng a mano.
+                </MudText>
+                <MudGrid Spacing="2">
+                    <MudItem xs="5">
+                        <MudNumericField T="decimal?" @bind-Value="_lat" Label="Latitud"
+                                          Variant="Variant.Outlined" Min="-90m" Max="90m" />
+                    </MudItem>
+                    <MudItem xs="5">
+                        <MudNumericField T="decimal?" @bind-Value="_lng" Label="Longitud"
+                                          Variant="Variant.Outlined" Min="-180m" Max="180m" />
+                    </MudItem>
+                    <MudItem xs="2">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                                   FullWidth="true" Disabled="@(_busy || _selectedId is null || _lat is null || _lng is null)"
+                                   OnClick="ResolveAsync">
+                            Confirmar
+                        </MudButton>
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
+
+            <LeafletMap Markers="_markers" Center="_center" Height="60vh"
+                         OnMapClicked="OnMapPicked" />
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public Guid SurveyId { get; set; }
+
+    private bool _loading = true;
+    private bool _busy;
+    private List<PendingGeoPhotoDto> _pending = new();
+    private Guid? _selectedId;
+    private decimal? _lat;
+    private decimal? _lng;
+    private LeafletMap.MapPoint? _center;
+    private List<LeafletMap.MapMarker> _markers = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+        await LoadExistingPointsAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        try
+        {
+            _pending = (await Api.ListPendingGeoAsync(SurveyId)).ToList();
+            if (_pending.Count > 0 && (_selectedId is null || _pending.All(p => p.Id != _selectedId)))
+                _selectedId = _pending[0].Id;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"No pude cargar la cola: {ex.Message}", Severity.Error);
+        }
+        finally { _loading = false; }
+    }
+
+    private async Task LoadExistingPointsAsync()
+    {
+        try
+        {
+            var points = await Api.ListPointsAsync(SurveyId);
+            _markers = points.Select(p => new LeafletMap.MapMarker(
+                p.Id, p.Latitude, p.Longitude, p.Title, p.Description, p.AccuracyM,
+                p.CaptureMode, p.CreatedAt)).ToList();
+            if (points.Count > 0)
+                _center = new LeafletMap.MapPoint(points[0].Latitude, points[0].Longitude);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"No pude cargar los puntos del relevamiento: {ex.Message}", Severity.Warning);
+        }
+    }
+
+    private Task SelectAsync(Guid id)
+    {
+        _selectedId = id;
+        return Task.CompletedTask;
+    }
+
+    private void OnMapPicked(LeafletMap.MapPoint p)
+    {
+        _lat = p.Latitude;
+        _lng = p.Longitude;
+        StateHasChanged();
+    }
+
+    private async Task ResolveAsync()
+    {
+        if (_selectedId is null || _lat is null || _lng is null) return;
+        _busy = true;
+        try
+        {
+            var result = await Api.ResolvePhotoGeoAsync(_selectedId.Value, _lat.Value, _lng.Value);
+            Snackbar.Add(
+                result.PointWasCreated
+                    ? "Foto georreferenciada — se creó un nuevo Punto."
+                    : "Foto asociada a un Punto existente.",
+                Severity.Success);
+            await LoadAsync();
+            await LoadExistingPointsAsync();
+            _lat = null;
+            _lng = null;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"No pude resolver: {ex.Message}", Severity.Error);
+        }
+        finally { _busy = false; }
+    }
+}

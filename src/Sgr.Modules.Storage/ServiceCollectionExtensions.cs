@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sgr.Domain.Photos;
 using Sgr.Modules.Storage.Adapters;
+using Sgr.Modules.Storage.Imaging;
 
 namespace Sgr.Modules.Storage;
 
@@ -30,6 +31,9 @@ public static class ServiceCollectionExtensions
         var activeAdapter = configuration["Storage:ActiveAdapter"] ?? StorageAdapterNames.Local;
         services.AddSingleton<IActiveAdapterResolver>(new StaticActiveAdapterResolver(activeAdapter));
         services.AddSingleton<IPhotoStorageAdapterFactory, PhotoStorageAdapterFactory>();
+
+        // Slice 7 / US-15 — lectura de EXIF para subida en lote desde web.
+        services.AddSingleton<IExifReader, MetadataExtractorExifReader>();
 
         return services;
     }

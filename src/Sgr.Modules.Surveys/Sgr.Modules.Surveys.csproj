@@ -4,6 +4,7 @@
     <ProjectReference Include="..\Sgr.Domain\Sgr.Domain.csproj" />
     <ProjectReference Include="..\Sgr.Persistence\Sgr.Persistence.csproj" />
     <ProjectReference Include="..\Sgr.Modules.Templates\Sgr.Modules.Templates.csproj" />
+    <ProjectReference Include="..\Sgr.Modules.Storage\Sgr.Modules.Storage.csproj" />
   </ItemGroup>
 
   <ItemGroup>

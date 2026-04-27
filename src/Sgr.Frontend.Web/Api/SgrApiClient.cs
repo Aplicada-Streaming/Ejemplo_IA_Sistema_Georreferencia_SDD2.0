@@ -49,6 +49,16 @@ public interface ISgrApiClient
     Task UpdateTemplateCaptureParamsAsync(Guid versionId, string captureParamsJson, CancellationToken ct = default);
     Task PublishTemplateVersionAsync(Guid versionId, CancellationToken ct = default);
 
+    // Slice 7 / US-15 + US-16 — carga lote web con EXIF + cola pendientes geo
+    Task<ManualUploadResultDto> ManualUploadAsync(
+        Guid surveyId,
+        string mode,
+        IReadOnlyList<(string fileName, string contentType, byte[] bytes)> files,
+        CancellationToken ct = default);
+    Task<IReadOnlyList<PendingGeoPhotoDto>> ListPendingGeoAsync(Guid surveyId, CancellationToken ct = default);
+    Task<GeoResolveResultDto> ResolvePhotoGeoAsync(
+        Guid photoId, decimal latitude, decimal longitude, CancellationToken ct = default);
+
     // Slice 6 / US-13 — gestión jerárquica de usuarios y áreas
     Task RegisterUserAsync(RegisterUserDto request, CancellationToken ct = default);
     Task<IReadOnlyList<AreaApiDto>> ListAreasAsync(CancellationToken ct = default);
@@ -314,6 +324,63 @@ public sealed class SgrApiClient : ISgrApiClient
             ?? Array.Empty<PointFieldValueDto>();
     }
 
+    // ───────── Slice 7 / US-15 + US-16 — carga lote + cola pendiente ─────────
+
+    public async Task<ManualUploadResultDto> ManualUploadAsync(
+        Guid surveyId,
+        string mode,
+        IReadOnlyList<(string fileName, string contentType, byte[] bytes)> files,
+        CancellationToken ct = default)
+    {
+        using var form = new MultipartFormDataContent
+        {
+            { new StringContent(mode), "Mode" },
+        };
+        foreach (var f in files)
+        {
+            var content = new ByteArrayContent(f.bytes);
+            content.Headers.ContentType = new MediaTypeHeaderValue(f.contentType);
+            form.Add(content, "Files", f.fileName);
+        }
+
+        using var request = new HttpRequestMessage(HttpMethod.Post,
+            $"/api/v1/surveys/{surveyId}/manual-upload") { Content = form };
+        AttachAuth(request);
+        using var response = await _http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+            throw await BuildApiExceptionAsync(response, "No pude subir el lote.", ct);
+        return await response.Content.ReadFromJsonAsync<ManualUploadResultDto>(cancellationToken: ct)
+            ?? throw new InvalidOperationException("Respuesta vacía.");
+    }
+
+    public async Task<IReadOnlyList<PendingGeoPhotoDto>> ListPendingGeoAsync(Guid surveyId, CancellationToken ct = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get,
+            $"/api/v1/surveys/{surveyId}/photos/pending-geo");
+        AttachAuth(request);
+        using var response = await _http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+            throw await BuildApiExceptionAsync(response, "No pude listar las pendientes.", ct);
+        return await response.Content.ReadFromJsonAsync<IReadOnlyList<PendingGeoPhotoDto>>(cancellationToken: ct)
+            ?? Array.Empty<PendingGeoPhotoDto>();
+    }
+
+    public async Task<GeoResolveResultDto> ResolvePhotoGeoAsync(
+        Guid photoId, decimal latitude, decimal longitude, CancellationToken ct = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post,
+            $"/api/v1/photos/{photoId}/geo-resolve")
+        {
+            Content = JsonContent.Create(new { Latitude = latitude, Longitude = longitude }),
+        };
+        AttachAuth(request);
+        using var response = await _http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+            throw await BuildApiExceptionAsync(response, "No pude resolver la geo.", ct);
+        return await response.Content.ReadFromJsonAsync<GeoResolveResultDto>(cancellationToken: ct)
+            ?? throw new InvalidOperationException("Respuesta vacía.");
+    }
+
     // ───────── Slice 6 / US-13 — usuarios + áreas ─────────
 
     public async Task RegisterUserAsync(RegisterUserDto requestDto, CancellationToken ct = default)
@@ -571,3 +638,25 @@ public sealed record RegisterUserDto(
     string FullName,
     string Role,
     Guid? AreaId);
+
+// ───────── Slice 7 / US-15 + US-16 ─────────
+
+public sealed record ManualUploadResultDto(
+    int FilesReceived,
+    int PhotosWithGps,
+    int PhotosPendingGeo,
+    int PointsCreated);
+
+public sealed record PendingGeoPhotoDto(
+    Guid Id,
+    Guid SurveyId,
+    string AdapterName,
+    long SizeBytes,
+    string? Comment,
+    string? OriginalFileName,
+    DateTime CreatedAt);
+
+public sealed record GeoResolveResultDto(
+    Guid PhotoId,
+    Guid PointId,
+    bool PointWasCreated);

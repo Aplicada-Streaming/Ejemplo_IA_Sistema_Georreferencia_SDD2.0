@@ -21,6 +21,8 @@ public sealed class SurveysController : ControllerBase
     private readonly ICloseSurveyService _close;
     private readonly IGetTemplateVersionService _getTemplate;
     private readonly IExportSurveyService _export;
+    private readonly IManualUploadService _manualUpload;
+    private readonly IPendingGeoPhotoService _pendingGeo;
     private readonly SurveyZipBundler _zipBundler;
 
     public SurveysController(
@@ -31,6 +33,8 @@ public sealed class SurveysController : ControllerBase
         ICloseSurveyService close,
         IGetTemplateVersionService getTemplate,
         IExportSurveyService export,
+        IManualUploadService manualUpload,
+        IPendingGeoPhotoService pendingGeo,
         SurveyZipBundler zipBundler)
     {
         _create = create;
@@ -40,6 +44,8 @@ public sealed class SurveysController : ControllerBase
         _close = close;
         _getTemplate = getTemplate;
         _export = export;
+        _manualUpload = manualUpload;
+        _pendingGeo = pendingGeo;
         _zipBundler = zipBundler;
     }
 
@@ -193,6 +199,80 @@ public sealed class SurveysController : ControllerBase
         var result = await _getTemplate.GetForSurveyAsync(id, ct);
         return Ok(result);
     }
+
+    /// <summary>
+    /// US-15 — Subida en lote de fotos al relevamiento.
+    /// Multipart con N archivos + parámetro <c>mode</c> (detenido | recorrido | una_por_foto).
+    /// El backend extrae EXIF, agrupa según el modo y crea Puntos + Fotos.
+    /// Las fotos sin EXIF quedan en cola pendiente (US-16).
+    /// </summary>
+    [HttpPost("{id:guid}/manual-upload")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(200_000_000)] // 200 MB por lote — más que suficiente para 50 fotos JPEG.
+    [ProducesResponseType(typeof(ManualUploadResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ManualUploadResult>> ManualUpload(
+        Guid id,
+        [FromForm] ManualUploadForm form,
+        CancellationToken ct)
+    {
+        if (form.Files is null || form.Files.Count == 0)
+            return BadRequest(new ProblemDetails
+            {
+                Status = 400, Title = "Bad Request", Detail = "Adjuntar al menos un archivo.",
+            });
+
+        if (!Enum.TryParse<ManualUploadMode>(form.Mode, ignoreCase: true, out var mode))
+            return BadRequest(new ProblemDetails
+            {
+                Status = 400, Title = "Bad Request",
+                Detail = "Mode inválido. Usar 'Detenido' | 'Recorrido' | 'UnaPorFoto'.",
+            });
+
+        var current = CurrentUserAccessor.FromPrincipal(User);
+        // Reusa visibilidad estándar — si no ve el survey, falla acá.
+        await _get.GetByIdAsync(id, current, ct);
+
+        var files = form.Files
+            .Where(f => f.Length > 0)
+            .Select(f => new ManualUploadFile(f.FileName, f.ContentType ?? "image/jpeg", f.OpenReadStream()))
+            .ToList();
+
+        try
+        {
+            var request = new ManualUploadRequest(id, mode, files);
+            var result = await _manualUpload.UploadAsync(request, current, ct);
+            return Ok(result);
+        }
+        finally
+        {
+            foreach (var f in files) await f.Content.DisposeAsync();
+        }
+    }
+
+    /// <summary>US-16 — Lista de fotos del relevamiento pendientes de georreferenciar.</summary>
+    [HttpGet("{id:guid}/photos/pending-geo")]
+    [ProducesResponseType(typeof(IReadOnlyList<PendingGeoPhotoDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<PendingGeoPhotoDto>>> ListPendingGeo(
+        Guid id, CancellationToken ct)
+    {
+        var current = CurrentUserAccessor.FromPrincipal(User);
+        await _get.GetByIdAsync(id, current, ct);
+        var result = await _pendingGeo.ListAsync(id, current, ct);
+        return Ok(result);
+    }
+}
+
+/// <summary>Form de la subida en lote — multipart con archivos + modo de agrupación.</summary>
+public sealed class ManualUploadForm
+{
+    public IFormFileCollection? Files { get; set; }
+
+    /// <summary>"Detenido" | "Recorrido" | "UnaPorFoto"</summary>
+    [Required, MaxLength(32)]
+    public string Mode { get; set; } = "Recorrido";
 }
 
 public sealed class CreateSurveyDto

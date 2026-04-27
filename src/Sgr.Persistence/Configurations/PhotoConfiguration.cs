@@ -20,7 +20,10 @@ public sealed class PhotoConfiguration : IEntityTypeConfiguration<Photo>
         });
         builder.HasKey(x => x.Id);
 
-        builder.Property(x => x.PointId).IsRequired();
+        // PointId nullable (Slice 7 / US-15-16): cuando la foto vino por web_manual_upload
+        // sin EXIF, queda en cola pendiente — sin punto. Se asocia luego.
+        builder.Property(x => x.PointId).IsRequired(false);
+        builder.Property(x => x.SurveyId).IsRequired(false);
         builder.Property(x => x.Comment).HasMaxLength(2000);
         builder.Property(x => x.AdapterName).HasMaxLength(16).IsRequired();
         builder.Property(x => x.AdapterRef).HasMaxLength(500).IsRequired();
@@ -34,6 +37,7 @@ public sealed class PhotoConfiguration : IEntityTypeConfiguration<Photo>
         builder.Property(x => x.DeletedAt);
 
         builder.HasIndex(x => x.PointId);
+        builder.HasIndex(x => x.SurveyId);
         builder.HasIndex(x => x.ContentHash);
     }
 }

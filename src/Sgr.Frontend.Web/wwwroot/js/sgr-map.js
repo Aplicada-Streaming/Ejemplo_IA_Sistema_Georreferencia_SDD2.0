@@ -115,6 +115,30 @@ export function panTo(elementId, lat, lng, zoom) {
     inst.map.setView([lat, lng], zoom ?? inst.map.getZoom());
 }
 
+/**
+ * Activa el "picker": cualquier click sobre el mapa invoca
+ * `OnMapClickedAsync(lat, lng)` en Blazor. Mostramos un marker rojo en el último
+ * punto seleccionado para que el usuario tenga feedback visual.
+ */
+export function enableMapClickPicker(elementId, dotNetRef) {
+    const inst = instances.get(elementId);
+    if (!inst || !dotNetRef) return;
+    let pickerMarker = null;
+    inst.map.on('click', e => {
+        const { lat, lng } = e.latlng;
+        if (pickerMarker) pickerMarker.remove();
+        pickerMarker = L.circleMarker([lat, lng], {
+            radius: 10,
+            color: '#d32f2f',
+            weight: 3,
+            fillColor: '#d32f2f',
+            fillOpacity: 0.9,
+        }).addTo(inst.map);
+        dotNetRef.invokeMethodAsync('OnMapClickedAsync', lat, lng)
+            .catch(err => console.error('[sgr-map] click invoke failed', err));
+    });
+}
+
 export function destroy(elementId) {
     const inst = instances.get(elementId);
     if (!inst) return;

@@ -14,6 +14,10 @@
     /// lo toca. El argumento es el <c>PointId</c> que el caller le asignó al marker.</summary>
     [Parameter] public EventCallback<Guid> OnMarkerClicked { get; set; }
 
+    /// <summary>Si está seteado, cualquier click sobre el mapa dispara este callback
+    /// con las coordenadas del punto. Útil para "picker" de georreferenciación manual (US-16).</summary>
+    [Parameter] public EventCallback<MapPoint> OnMapClicked { get; set; }
+
     private readonly string ElementId = $"sgr-map-{Guid.NewGuid():N}";
     private IJSObjectReference? _module;
     private DotNetObjectReference<LeafletMap>? _selfRef;
@@ -33,6 +37,12 @@
             });
             _initialized = true;
             await PushMarkersAsync();
+
+            if (OnMapClicked.HasDelegate)
+            {
+                _selfRef ??= DotNetObjectReference.Create(this);
+                await _module.InvokeVoidAsync("enableMapClickPicker", ElementId, _selfRef);
+            }
         }
         else if (_initialized && !ReferenceEquals(_lastMarkers, Markers))
         {
@@ -63,6 +73,12 @@
     [JSInvokable]
     public Task OnMarkerClickedAsync(Guid pointId) =>
         OnMarkerClicked.HasDelegate ? OnMarkerClicked.InvokeAsync(pointId) : Task.CompletedTask;
+
+    [JSInvokable]
+    public Task OnMapClickedAsync(double lat, double lng) =>
+        OnMapClicked.HasDelegate
+            ? OnMapClicked.InvokeAsync(new MapPoint((decimal)lat, (decimal)lng))
+            : Task.CompletedTask;
 
     public async ValueTask DisposeAsync()
     {

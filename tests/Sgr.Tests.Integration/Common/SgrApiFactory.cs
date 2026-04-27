@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Sgr.Modules.Storage.Imaging;
 using Sgr.Persistence;
 
 namespace Sgr.Tests.Integration.Common;
@@ -12,6 +13,12 @@ namespace Sgr.Tests.Integration.Common;
 public class SgrApiFactory : WebApplicationFactory<Program>
 {
     private readonly string _databaseName = $"sgr-test-{Guid.NewGuid():N}";
+
+    /// <summary>
+    /// Acceso al fake EXIF reader para tests que necesiten controlar el GPS de cada foto
+    /// sin construir un JPEG real con EXIF.
+    /// </summary>
+    public FakeExifReader Exif { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -39,6 +46,11 @@ public class SgrApiFactory : WebApplicationFactory<Program>
             services.RemoveAll(typeof(IDbContextOptionsConfiguration<SgrDbContext>));
 
             services.AddDbContext<SgrDbContext>(opt => opt.UseInMemoryDatabase(_databaseName));
+
+            // Reemplazo del IExifReader real por uno fake — los tests inyectan ExifData
+            // por tag identificable en el primer chunk del stream del archivo.
+            services.RemoveAll(typeof(IExifReader));
+            services.AddSingleton<IExifReader>(Exif);
         });
     }
 }
