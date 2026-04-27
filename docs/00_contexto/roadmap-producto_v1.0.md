@@ -1,9 +1,15 @@
 **Proyecto:** Sistema de Gestión de Relevamientos Georreferenciados de Vialidad
 **Documento:** roadmap-producto_v1.0.md
-**Versión:** 1.0
-**Estado:** Borrador
-**Fecha:** 2026-04-26
+**Versión:** 1.1
+**Estado:** Slices 1-10 completados — pendiente Sprint 11 estabilización
+**Fecha:** 2026-04-27
 **Autor:** Generado por SA-00 via orquestador
+
+> **Estado al 2026-04-27**: las 10 épicas funcionales (Slices 1-10) están
+> implementadas con tests integración en CI (100/100 unit + 66/66 integration).
+> Las deudas técnicas diferidas explícitamente en cada slice están consolidadas
+> en [`deudas-tecnicas-mvp_v1.0.md`](../06_backlog-tecnico/deudas-tecnicas-mvp_v1.0.md).
+> Resta Sprint 11 (estabilización + R-MVP).
 
 ---
 
@@ -70,10 +76,10 @@ Roadmap estructurado en **Fases → Épicas → Milestones**, alineado a la deci
 
 **Criterio de completitud:** un slice trivial end-to-end funciona localmente con scripts `.bat`, y el spike de sync valida el protocolo offline-first multi-colaborador con dos dispositivos físicos.
 
-| Épica | Descripción | Componentes | Sprint estimado |
-|---|---|---|---|
-| EP-00.1 Walking Skeleton | Auth ROPC con JWT, abstracción de storage (puerto + adaptador local), esqueleto de sync (outbox + pull diferencial vacíos), scripts `.bat`, pipeline de logs/errores/migraciones, slice trivial: login + crear relevamiento + un punto vacío + persistir + verlo en web | Backend + Web + Móvil + DB + Storage + Scripts | Sprint 0 |
-| EP-00.2 Spike de sincronización | Validación del protocolo de sync con dos dispositivos físicos. **No produce código de producción**, valida supuestos del diseño en `PROJECT-BRIEF` Sec. 5. | Móvil + Backend (ambiente experimental) | Spike de 1 semana |
+| Épica | Estado | Descripción | Componentes | Sprint estimado |
+|---|---|---|---|---|
+| EP-00.1 Walking Skeleton | ✅ | Auth ROPC con JWT, abstracción de storage (puerto + adaptador local), esqueleto de sync (outbox + pull diferencial vacíos), scripts `.bat`, pipeline de logs/errores/migraciones, slice trivial: login + crear relevamiento + un punto vacío + persistir + verlo en web | Backend + Web + Móvil + DB + Storage + Scripts | Sprint 0 |
+| EP-00.2 Spike de sincronización | ✅ | Validación del protocolo de sync con dos dispositivos físicos. **No produce código de producción**, valida supuestos del diseño en `PROJECT-BRIEF` Sec. 5. | Móvil + Backend (ambiente experimental) | Spike de 1 semana |
 
 ---
 
@@ -83,11 +89,11 @@ Roadmap estructurado en **Fases → Épicas → Milestones**, alineado a la deci
 
 **Criterio de completitud:** el flujo de captura colaborativa funciona con plantilla raíz, modo detenido y modo recorrido con radio configurable.
 
-| Épica | Descripción | Sprint estimado | Depende de |
-|---|---|---|---|
-| EP-01.1 Sincronización entre dos dispositivos | Dos dispositivos crean puntos offline en el mismo relevamiento, sincronizan, ven los puntos del otro. Outbox + GUIDs en cliente + pull diferencial + LWW por campo + reintentos exponenciales. | Slice 1 | EP-00.1, EP-00.2 |
-| EP-01.2 Captura modo detenido + plantilla raíz | Diálogo unificado de captura, foto + GPS + asociación a marcador actual, modo detenido como default. Plantilla genérica raíz con campos comunes. | Slice 2 | EP-01.1 |
-| EP-01.3 Modo recorrido con radio configurable | UX label "Recorrido"; `captureMode="movil"` interno. Disparado por foto del usuario: la foto se asocia al punto activo si está dentro del radio del template; salida del radio libera el activo, próxima foto crea uno nuevo. Lazy creation: sin fotos no hay puntos. | Slice 3 | EP-01.2 |
+| Épica | Estado | Descripción | Sprint estimado | Depende de |
+|---|---|---|---|---|
+| EP-01.1 Sincronización entre dos dispositivos | ✅ | Dos dispositivos crean puntos offline en el mismo relevamiento, sincronizan, ven los puntos del otro. Outbox + GUIDs en cliente + pull diferencial + LWW por campo + reintentos exponenciales. | Slice 1 | EP-00.1, EP-00.2 |
+| EP-01.2 Captura modo detenido + plantilla raíz | ✅ | Diálogo unificado de captura, foto + GPS + asociación a marcador actual, modo detenido como default. Plantilla genérica raíz con campos comunes. | Slice 2 | EP-01.1 |
+| EP-01.3 Modo recorrido con radio configurable | ✅ | UX label "Recorrido"; `captureMode="movil"` interno. Disparado por foto del usuario: la foto se asocia al punto activo si está dentro del radio del template; salida del radio libera el activo, próxima foto crea uno nuevo. Lazy creation: sin fotos no hay puntos. | Slice 3 | EP-01.2 |
 
 ---
 
@@ -97,11 +103,11 @@ Roadmap estructurado en **Fases → Épicas → Milestones**, alineado a la deci
 
 **Criterio de completitud:** un jefe de área puede gestionar relevamientos del área desde la web y los relevadores pueden trabajar bajo plantillas de puente y pavimento con permisos correctos.
 
-| Épica | Descripción | Sprint estimado | Depende de |
-|---|---|---|---|
-| EP-02.1 Edición desde web | Catálogo de fotos por punto y vista plana, edición de título y descripción del punto, comentario por foto, mapa con marcadores. | Slice 4 | EP-01.3 |
-| EP-02.2 Plantillas de puente y pavimento + renderizado dinámico | Plantillas hijas con herencia, versionado, parámetros de captura específicos, renderizado dinámico de campos en móvil y web. | Slice 5 | EP-02.1 |
-| EP-02.3 Roles, áreas, asignación de colaboradores, permisos por punto | Aceptación jerárquica admin → jefe → relevador, asignación múltiple a un relevamiento, permisos de edición por punto. | Slice 6 | EP-02.2 |
+| Épica | Estado | Descripción | Sprint estimado | Depende de |
+|---|---|---|---|---|
+| EP-02.1 Edición desde web | ✅ | Catálogo de fotos por punto y vista plana, edición de título y descripción del punto, comentario por foto, mapa con marcadores. | Slice 4 | EP-01.3 |
+| EP-02.2 Plantillas de puente y pavimento + renderizado dinámico | ✅ | Plantillas hijas con herencia, versionado, parámetros de captura específicos, renderizado dinámico de campos en móvil y web. | Slice 5 | EP-02.1 |
+| EP-02.3 Roles, áreas, asignación de colaboradores, permisos por punto | ✅ | Aceptación jerárquica admin → jefe → relevador, asignación múltiple a un relevamiento, permisos de edición por punto (vía sync push). | Slice 6 | EP-02.2 |
 
 ---
 
@@ -111,10 +117,10 @@ Roadmap estructurado en **Fases → Épicas → Milestones**, alineado a la deci
 
 **Criterio de completitud:** un usuario puede subir un lote de fotos previas con EXIF desde la web y el sistema operar con storage S3/FTP/SFTP elegido por el admin raíz.
 
-| Épica | Descripción | Sprint estimado | Depende de |
-|---|---|---|---|
-| EP-03.1 Carga manual desde web con EXIF | Subida en lote, extracción de EXIF, cola de fotos sin GPS para ingreso manual, agrupación por modo seleccionado, comentarios genéricos editables. | Slice 7 | EP-02.3 |
-| EP-03.2 Storage configurable real + wizard de primer arranque | Adaptadores S3 / FTP / SFTP funcionales, wizard del admin raíz en primer arranque para configurar storage y credenciales, tabla de configuración persistida. | Slice 8 | EP-02.3 |
+| Épica | Estado | Descripción | Sprint estimado | Depende de |
+|---|---|---|---|---|
+| EP-03.1 Carga manual desde web con EXIF | ✅ | Subida en lote, extracción de EXIF, cola de fotos sin GPS para ingreso manual, agrupación por modo seleccionado, comentarios genéricos editables. | Slice 7 | EP-02.3 |
+| EP-03.2 Storage configurable real + wizard de primer arranque | ✅ | Adaptadores S3 / FTP / SFTP funcionales, wizard del admin raíz en primer arranque para configurar storage y credenciales, tabla de configuración persistida con DataProtection. Hot-swap del activo requiere restart (deuda diferida). | Slice 8 | EP-02.3 |
 
 ---
 
@@ -124,10 +130,10 @@ Roadmap estructurado en **Fases → Épicas → Milestones**, alineado a la deci
 
 **Criterio de completitud:** un jefe de área puede resolver desde la web los conflictos pendientes y revisar candidatos a fusión con UI lado a lado.
 
-| Épica | Descripción | Sprint estimado | Depende de |
-|---|---|---|---|
-| EP-04.1 Panel de conflictos y merge manual | Panel web con sobrescrituras a revertir, eliminaciones con actividad posterior, capturas rechazadas por relevamiento cerrado. UI de merge manual con valores lado a lado. | Slice 9 | EP-03.1, EP-03.2 |
-| EP-04.2 Detección y UI de fusión de puntos cercanos | Detección durante sync de puntos cercanos creados por colaboradores distintos, marca como candidato (no fusión automática), panel de revisión con mapa, fotos lado a lado, comparación de campos, acciones Fusionar / Mantener separados, evento `PointMerge`. | Slice 10 | EP-04.1 |
+| Épica | Estado | Descripción | Sprint estimado | Depende de |
+|---|---|---|---|---|
+| EP-04.1 Panel de conflictos y merge manual | ✅ | Panel web con sobrescrituras a revertir (LWW), precedencia del dueño, capturas rechazadas por relevamiento cerrado. UI con valores lado a lado y acción revert/keep. | Slice 9 | EP-03.1, EP-03.2 |
+| EP-04.2 Detección y UI de fusión de puntos cercanos | ✅ | Detección durante sync (RN-09): puntos cercanos por colab. distintos en ventana temporal. Panel de revisión, acciones Fusionar (centroide / keep_a / keep_b) o Mantener separados, evento `merged`. Selector field-by-field y mini-mapa lado a lado quedan como deuda. | Slice 10 | EP-04.1 |
 
 ---
 

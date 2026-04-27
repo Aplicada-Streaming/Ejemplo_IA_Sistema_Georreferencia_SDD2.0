@@ -45,6 +45,9 @@
                             <MudNavLink Href="/templates" Icon="@Icons.Material.Filled.Description">
                                 Plantillas
                             </MudNavLink>
+
+                            <MudDivider Class="my-2" />
+                            <MudText Typo="Typo.caption" Class="px-4 mud-text-secondary">Personas</MudText>
                             <MudNavLink Href="/users/pending" Icon="@Icons.Material.Filled.HourglassEmpty">
                                 Solicitudes
                             </MudNavLink>
@@ -55,6 +58,8 @@
                     </AuthorizeView>
                     <AuthorizeView Roles="admin_raiz" Context="admin">
                         <Authorized>
+                            <MudDivider Class="my-2" />
+                            <MudText Typo="Typo.caption" Class="px-4 mud-text-secondary">Sistema</MudText>
                             <MudNavLink Href="/admin/storage" Icon="@Icons.Material.Filled.Storage">
                                 Storage
                             </MudNavLink>

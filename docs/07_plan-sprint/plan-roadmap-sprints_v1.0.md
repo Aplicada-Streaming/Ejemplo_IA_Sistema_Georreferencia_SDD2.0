@@ -1,8 +1,8 @@
 **Proyecto:** Sistema de Gestión de Relevamientos Georreferenciados de Vialidad
 **Documento:** plan-roadmap-sprints_v1.0.md
-**Versión:** 1.0
-**Estado:** Borrador
-**Fecha:** 2026-04-26
+**Versión:** 1.1
+**Estado:** Sprints 0-10 completados — pendiente Sprint 11 estabilización
+**Fecha:** 2026-04-27
 **Autor:** Generado por SA-07 via orquestador
 
 ---
@@ -17,20 +17,24 @@ Plan tentativo de los sprints que conforman el MVP. Solo los **Sprint 0** y **Sp
 
 ## 1. Cronograma indicativo
 
-| Sprint | Slice / Fase | Foco | US comprometidas (estim) | SP estim | Demo |
-|---|---|---|---|---|---|
-| **Sprint 0** | EP-00.1 + Spike | Walking skeleton + spike sync | US-01, US-02 + 10 BTs | 64 (BT-pesado) | Slice trivial end-to-end + spike validado |
-| **Sprint 1** | EP-01.1 — Slice 1 | Sync entre dos dispositivos | US-03, US-04, US-05 | 34 | Dos dispositivos sincronizan puntos vacíos |
-| **Sprint 2** | EP-01.2 — Slice 2 | Captura modo detenido + plantilla raíz | US-06, US-07 | 21 | Captura real con foto + GPS + comentarios |
-| **Sprint 3** | EP-01.3 — Slice 3 | Modo recorrido con radio | US-08 | 8 (+ buffer) | Modo recorrido funcionando con radio (UX label "Recorrido"; `captureMode="movil"` interno) |
-| **Sprint 4** | EP-02.1 — Slice 4 | Edición desde web + mapa colaborativo | US-09, US-10 | 21 | Revisión completa desde web |
-| **Sprint 5** | EP-02.2 — Slice 5 | Plantillas hijas + renderizado dinámico | US-11, US-12 | 21 | Inspección de puente y pavimento operativas |
-| **Sprint 6** | EP-02.3 — Slice 6 | Roles, áreas, permisos por punto | US-13, US-14 | 16 (+ buffer) | Roles y permisos validados |
-| **Sprint 7** | EP-03.1 — Slice 7 | Carga manual web con EXIF | US-15, US-16 | 21 | Carga lote + georreferenciación manual |
-| **Sprint 8** | EP-03.2 — Slice 8 | Storage configurable + wizard | US-17, US-18, BT-12, BT-14 | 27 | Wizard + S3/FTP/SFTP funcionando |
-| **Sprint 9** | EP-04.1 — Slice 9 | Panel de conflictos + merge manual | US-19, US-20, BT-13 | 26 | Panel y resolución manual |
-| **Sprint 10** | EP-04.2 — Slice 10 | Detección + UI fusión de puntos | US-21, US-22 | 26 | Fusión de puntos completa |
-| **Sprint 11** | Estabilización + R-MVP | Bugfixes, hardening, demo final | — | (capacidad para issues) | Release MVP |
+| Sprint | Estado | Slice / Fase | Foco | US comprometidas (estim) | SP estim | Demo |
+|---|---|---|---|---|---|---|
+| **Sprint 0** | ✅ | EP-00.1 + Spike | Walking skeleton + spike sync | US-01, US-02 + 10 BTs | 64 (BT-pesado) | Slice trivial end-to-end + spike validado |
+| **Sprint 1** | ✅ | EP-01.1 — Slice 1 | Sync entre dos dispositivos | US-03, US-04, US-05 | 34 | Dos dispositivos sincronizan puntos vacíos |
+| **Sprint 2** | ✅ | EP-01.2 — Slice 2 | Captura modo detenido + plantilla raíz | US-06, US-07 | 21 | Captura real con foto + GPS + comentarios |
+| **Sprint 3** | ✅ | EP-01.3 — Slice 3 | Modo recorrido con radio | US-08 | 8 (+ buffer) | Modo recorrido funcionando con radio (UX label "Recorrido"; `captureMode="movil"` interno) |
+| **Sprint 4** | ✅ | EP-02.1 — Slice 4 | Edición desde web + mapa colaborativo | US-09, US-10 | 21 | Revisión completa desde web |
+| **Sprint 5** | ✅ | EP-02.2 — Slice 5 | Plantillas hijas + renderizado dinámico | US-11, US-12 | 21 | Inspección de puente y pavimento operativas |
+| **Sprint 6** | ✅ | EP-02.3 — Slice 6 | Roles, áreas, permisos por punto | US-13, US-14 | 16 (+ buffer) | Roles y permisos validados |
+| **Sprint 7** | ✅ | EP-03.1 — Slice 7 | Carga manual web con EXIF | US-15, US-16 | 21 | Carga lote + georreferenciación manual |
+| **Sprint 8** | ✅ | EP-03.2 — Slice 8 | Storage configurable + wizard | US-17, US-18, BT-12, BT-14 | 27 | Wizard + S3/FTP/SFTP funcionando |
+| **Sprint 9** | ✅ | EP-04.1 — Slice 9 | Panel de conflictos + merge manual | US-19, US-20, BT-13 | 26 | Panel y resolución manual |
+| **Sprint 10** | ✅ | EP-04.2 — Slice 10 | Detección + UI fusión de puntos | US-21, US-22 | 26 | Fusión de puntos completa |
+| **Sprint 11** | ⏳ | Estabilización + R-MVP | Bugfixes, hardening, demo final, deudas técnicas priorizadas | — | (capacidad para issues) | Release MVP |
+
+> **Cobertura de tests al 2026-04-27**: 100/100 unit + 66/66 integration en CI.
+> **Deudas diferidas explícitas** consolidadas en
+> [`deudas-tecnicas-mvp_v1.0.md`](../06_backlog-tecnico/deudas-tecnicas-mvp_v1.0.md).
 
 **Total acumulado:** ~285 SP útiles (sin contar el sprint de estabilización), distribuidos en ~10-11 sprints reales (~5-6 meses si los sprints son de 2 semanas).
 
