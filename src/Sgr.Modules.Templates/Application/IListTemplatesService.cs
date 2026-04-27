@@ -33,19 +33,31 @@ public sealed class ListTemplatesService : IListTemplatesService
             .Select(g => g.OrderByDescending(v => v.VersionNumber).First())
             .ToListAsync(ct);
 
-        var byTemplate = publishedVersions.ToDictionary(v => v.TemplateId);
+        // E.5.c: también traemos el último draft (independiente de si hay publicado)
+        // para que el admin pueda volver a una plantilla recién creada vía la lista.
+        var draftVersions = await _db.TemplateVersions.AsNoTracking()
+            .Where(v => v.Status == "borrador")
+            .GroupBy(v => v.TemplateId)
+            .Select(g => g.OrderByDescending(v => v.VersionNumber).First())
+            .ToListAsync(ct);
+
+        var publishedByTemplate = publishedVersions.ToDictionary(v => v.TemplateId);
+        var draftByTemplate = draftVersions.ToDictionary(v => v.TemplateId);
 
         return templates.Select(t =>
         {
-            byTemplate.TryGetValue(t.Id, out var v);
+            publishedByTemplate.TryGetValue(t.Id, out var pub);
+            draftByTemplate.TryGetValue(t.Id, out var draft);
             return new TemplateSummaryDto(
                 Id: t.Id,
                 Name: t.Name,
                 IsRoot: t.IsRoot,
                 ParentTemplateId: t.ParentTemplateId,
-                LatestPublishedVersionId: v?.Id,
-                LatestPublishedVersionNumber: v?.VersionNumber,
-                LatestPublishedAt: v?.PublishedAt,
+                LatestPublishedVersionId: pub?.Id,
+                LatestPublishedVersionNumber: pub?.VersionNumber,
+                LatestPublishedAt: pub?.PublishedAt,
+                LatestDraftVersionId: draft?.Id,
+                LatestDraftVersionNumber: draft?.VersionNumber,
                 CreatedAt: t.CreatedAt);
         }).ToList();
     }
@@ -59,4 +71,6 @@ public sealed record TemplateSummaryDto(
     Guid? LatestPublishedVersionId,
     int? LatestPublishedVersionNumber,
     DateTime? LatestPublishedAt,
+    Guid? LatestDraftVersionId,
+    int? LatestDraftVersionNumber,
     DateTime CreatedAt);

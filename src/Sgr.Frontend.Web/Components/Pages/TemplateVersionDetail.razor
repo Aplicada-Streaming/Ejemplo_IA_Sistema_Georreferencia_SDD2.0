@@ -32,6 +32,18 @@ else if (_version is not null)
                     }
                 </MudText>
             </div>
+            <AuthorizeView Roles="admin_raiz" Context="auth">
+                <Authorized>
+                    @if (_version.Status == "borrador")
+                    {
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Edit"
+                                   Href="@($"/templates/versions/{_version.VersionId}/edit")">
+                            Editar borrador
+                        </MudButton>
+                    }
+                </Authorized>
+            </AuthorizeView>
         </MudStack>
     </MudPaper>
 

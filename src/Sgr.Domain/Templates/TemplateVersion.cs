@@ -52,5 +52,28 @@ public sealed class TemplateVersion : Entity
         PublishedAt = now;
     }
 
+    /// <summary>
+    /// Reemplaza el JSON de definiciones de campos. Sólo permitido en estado borrador
+    /// (RN-05: las versiones publicadas son inmutables).
+    /// </summary>
+    public void UpdateFieldDefinitions(string fieldDefinitionsJson)
+    {
+        if (Status != TemplateVersionStatus.Borrador)
+            throw new InvalidOperationException("Sólo se pueden editar versiones en estado borrador.");
+        if (string.IsNullOrWhiteSpace(fieldDefinitionsJson))
+            throw new ArgumentException("Field definitions are required.", nameof(fieldDefinitionsJson));
+        FieldDefinitionsJson = fieldDefinitionsJson;
+    }
+
+    /// <summary>Reemplaza el JSON de parámetros de captura. Sólo en borrador (RN-05).</summary>
+    public void UpdateCaptureParams(string captureParamsJson)
+    {
+        if (Status != TemplateVersionStatus.Borrador)
+            throw new InvalidOperationException("Sólo se pueden editar versiones en estado borrador.");
+        if (string.IsNullOrWhiteSpace(captureParamsJson))
+            throw new ArgumentException("Capture params are required.", nameof(captureParamsJson));
+        CaptureParamsJson = captureParamsJson;
+    }
+
     public bool IsPublished => Status == TemplateVersionStatus.Publicada;
 }

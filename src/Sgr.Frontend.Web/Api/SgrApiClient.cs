@@ -42,6 +42,12 @@ public interface ISgrApiClient
     // E.6.a — Reportes y exports
     Task<ReportSummaryDto> GetReportSummaryAsync(CancellationToken ct = default);
     Task<byte[]> ExportSurveyAsync(Guid surveyId, string format, CancellationToken ct = default);
+
+    // E.5.c — Editor de plantillas (admin only)
+    Task<TemplateCreatedDto> CreateTemplateAsync(string name, CancellationToken ct = default);
+    Task UpdateTemplateFieldsAsync(Guid versionId, string fieldDefinitionsJson, CancellationToken ct = default);
+    Task UpdateTemplateCaptureParamsAsync(Guid versionId, string captureParamsJson, CancellationToken ct = default);
+    Task PublishTemplateVersionAsync(Guid versionId, CancellationToken ct = default);
 }
 
 public sealed class SgrApiClient : ISgrApiClient
@@ -215,6 +221,53 @@ public sealed class SgrApiClient : ISgrApiClient
             ?? throw new InvalidOperationException("Respuesta vacía.");
     }
 
+    public async Task<TemplateCreatedDto> CreateTemplateAsync(string name, CancellationToken ct = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/templates")
+        {
+            Content = JsonContent.Create(new { Name = name }),
+        };
+        AttachAuth(request);
+        using var response = await _http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+            throw await BuildApiExceptionAsync(response, "No pude crear la plantilla.", ct);
+        return await response.Content.ReadFromJsonAsync<TemplateCreatedDto>(cancellationToken: ct)
+            ?? throw new InvalidOperationException("Respuesta vacía.");
+    }
+
+    public async Task UpdateTemplateFieldsAsync(Guid versionId, string fieldDefinitionsJson, CancellationToken ct = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Put, $"/api/v1/templates/versions/{versionId}/fields")
+        {
+            Content = JsonContent.Create(new { FieldDefinitionsJson = fieldDefinitionsJson }),
+        };
+        AttachAuth(request);
+        using var response = await _http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+            throw await BuildApiExceptionAsync(response, "No pude actualizar los campos.", ct);
+    }
+
+    public async Task UpdateTemplateCaptureParamsAsync(Guid versionId, string captureParamsJson, CancellationToken ct = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Put, $"/api/v1/templates/versions/{versionId}/capture-params")
+        {
+            Content = JsonContent.Create(new { CaptureParamsJson = captureParamsJson }),
+        };
+        AttachAuth(request);
+        using var response = await _http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+            throw await BuildApiExceptionAsync(response, "No pude actualizar capture params.", ct);
+    }
+
+    public async Task PublishTemplateVersionAsync(Guid versionId, CancellationToken ct = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/templates/versions/{versionId}/publish");
+        AttachAuth(request);
+        using var response = await _http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+            throw await BuildApiExceptionAsync(response, "No pude publicar la versión.", ct);
+    }
+
     public async Task<ReportSummaryDto> GetReportSummaryAsync(CancellationToken ct = default)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/reports/summary");
@@ -374,6 +427,8 @@ public sealed record TemplateSummaryDto(
     Guid? LatestPublishedVersionId,
     int? LatestPublishedVersionNumber,
     DateTime? LatestPublishedAt,
+    Guid? LatestDraftVersionId,
+    int? LatestDraftVersionNumber,
     DateTime CreatedAt);
 
 public sealed record TemplateVersionDetailDto(
@@ -392,6 +447,8 @@ public sealed record FieldDefinitionDto(
     string Type,
     bool Required,
     IReadOnlyList<string>? Options);
+
+public sealed record TemplateCreatedDto(Guid TemplateId, Guid DraftVersionId);
 
 /// <summary>Espejo de Sgr.Backend.Api.Controllers.PointFieldValueDto.</summary>
 public sealed record PointFieldValueDto(

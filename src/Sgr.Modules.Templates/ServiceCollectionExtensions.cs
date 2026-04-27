@@ -10,6 +10,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ITemplateVersionQuery, TemplateVersionQuery>();
         services.AddScoped<IListTemplatesService, ListTemplatesService>();
         services.AddScoped<IGetTemplateVersionService, GetTemplateVersionService>();
+        services.AddScoped<ITemplateEditorService, TemplateEditorService>();
         return services;
     }
 }

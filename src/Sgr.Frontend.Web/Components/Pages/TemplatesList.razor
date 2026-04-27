@@ -6,7 +6,18 @@
 
 <PageTitle>SGR — Plantillas</PageTitle>
 
-<MudText Typo="Typo.h4" Class="mb-4">Plantillas</MudText>
+<MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudText Typo="Typo.h4">Plantillas</MudText>
+    <AuthorizeView Roles="admin_raiz" Context="auth">
+        <Authorized>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add"
+                       Href="/templates/new">
+                Nueva plantilla
+            </MudButton>
+        </Authorized>
+    </AuthorizeView>
+</MudStack>
 
 @if (_loading)
 {
@@ -22,24 +33,19 @@ else if (_templates.Count == 0)
 }
 else
 {
-    <MudAlert Severity="Severity.Info" Class="mb-3" Icon="@Icons.Material.Filled.Info">
-        Read-only por ahora. La creación / edición / publicación de versiones llega en E.5.c.
-    </MudAlert>
-
     <MudTable Items="_templates" Hover="true" Dense="true" Striped="true"
               OnRowClick="@((TableRowClickEventArgs<TemplateSummaryDto> e) => OpenVersion(e.Item!))"
               Style="cursor: pointer;">
         <HeaderContent>
             <MudTh>Nombre</MudTh>
             <MudTh>Tipo</MudTh>
-            <MudTh>Versión publicada</MudTh>
-            <MudTh>Publicada</MudTh>
-            <MudTh>Creada</MudTh>
+            <MudTh>Estado</MudTh>
+            <MudTh>Última actividad</MudTh>
         </HeaderContent>
-        <RowTemplate>
-            <MudTd>@context.Name</MudTd>
+        <RowTemplate Context="row">
+            <MudTd>@row.Name</MudTd>
             <MudTd>
-                @if (context.IsRoot)
+                @if (row.IsRoot)
                 {
                     <MudChip T="string" Size="Size.Small" Color="Color.Primary">Raíz</MudChip>
                 }
@@ -49,19 +55,25 @@ else
                 }
             </MudTd>
             <MudTd>
-                @if (context.LatestPublishedVersionNumber is { } v)
+                @if (row.LatestPublishedVersionNumber is { } v)
                 {
-                    <span>v@v</span>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success">Publicada v@v</MudChip>
                 }
-                else
+                @if (row.LatestDraftVersionNumber is { } d)
                 {
-                    <span class="mud-text-secondary">— sin publicar —</span>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="ms-1">Borrador v@d</MudChip>
+                }
+                @if (row.LatestPublishedVersionNumber is null && row.LatestDraftVersionNumber is null)
+                {
+                    <span class="mud-text-secondary">— sin versiones —</span>
                 }
             </MudTd>
             <MudTd>
-                @(context.LatestPublishedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "—")
+                @{
+                    var ts = row.LatestPublishedAt ?? row.CreatedAt;
+                }
+                @ts.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
             </MudTd>
-            <MudTd>@context.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudTd>
         </RowTemplate>
     </MudTable>
 }
@@ -80,7 +92,10 @@ else
 
     private void OpenVersion(TemplateSummaryDto t)
     {
-        if (t.LatestPublishedVersionId is { } vid)
-            Nav.NavigateTo($"/templates/versions/{vid}");
+        // Preferimos publicada (read-only); si sólo hay draft, vamos al editor.
+        if (t.LatestPublishedVersionId is { } pubId)
+            Nav.NavigateTo($"/templates/versions/{pubId}");
+        else if (t.LatestDraftVersionId is { } draftId)
+            Nav.NavigateTo($"/templates/versions/{draftId}/edit");
     }
 }

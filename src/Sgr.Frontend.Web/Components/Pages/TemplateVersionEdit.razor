@@ -1,0 +1,366 @@
+@page "/templates/versions/{VersionId:guid}/edit"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = "admin_raiz")]
+@inject ISgrApiClient Api
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+
+<PageTitle>SGR — Editar plantilla</PageTitle>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+}
+else if (_loadError is not null)
+{
+    <MudAlert Severity="Severity.Error">@_loadError</MudAlert>
+}
+else if (_version is not null)
+{
+    <MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+        <div>
+            <MudText Typo="Typo.h5">@_version.TemplateName · v@_version.VersionNumber</MudText>
+            <MudChip T="string" Size="Size.Small" Color="@(_version.Status == "publicada" ? Color.Success : Color.Warning)">
+                @_version.Status
+            </MudChip>
+        </div>
+        <MudStack Row Spacing="1">
+            @if (_version.Status == "borrador")
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Success"
+                           StartIcon="@Icons.Material.Filled.Publish"
+                           OnClick="PublishAsync" Disabled="_busy">
+                    Publicar
+                </MudButton>
+            }
+            <MudButton Variant="Variant.Text" Href="/templates" Disabled="_busy">Volver</MudButton>
+        </MudStack>
+    </MudStack>
+
+    @if (_version.Status == "publicada")
+    {
+        <MudAlert Severity="Severity.Info" Class="mb-3" Icon="@Icons.Material.Filled.Lock">
+            Esta versión ya está <strong>publicada</strong> y por lo tanto inmutable (RN-05).
+            Los cambios en campos/parámetros se aplicarían como una nueva versión (deuda E.5.c.2).
+        </MudAlert>
+    }
+
+    <MudGrid>
+        @* ───── Campos ───── *@
+        <MudItem xs="12" md="7">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+                    <MudText Typo="Typo.h6">Campos</MudText>
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Add"
+                               OnClick="AddField" Disabled="@(_busy || _version.Status == "publicada")">
+                        Agregar campo
+                    </MudButton>
+                </MudStack>
+
+                @if (_fields.Count == 0)
+                {
+                    <MudText Class="mud-text-secondary">Sin campos. Agregá al menos uno antes de publicar.</MudText>
+                }
+                else
+                {
+                    @for (int i = 0; i < _fields.Count; i++)
+                    {
+                        var idx = i;
+                        var f = _fields[idx];
+                        <MudPaper Class="pa-3 mb-2" Elevation="0" Style="border:1px solid var(--mud-palette-lines-default);">
+                            <MudStack Row Spacing="2" AlignItems="AlignItems.Start">
+                                <MudStack Spacing="1" Style="flex:1;">
+                                    <MudTextField T="string" Label="Key (snake_case)"
+                                                  Value="@f.Key"
+                                                  ValueChanged="@(v => UpdateField(idx, f with { Key = v }))"
+                                                  Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                  Disabled="@(_busy || _version.Status == "publicada")" />
+                                    <MudTextField T="string" Label="Label visible"
+                                                  Value="@f.Label"
+                                                  ValueChanged="@(v => UpdateField(idx, f with { Label = v }))"
+                                                  Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                  Disabled="@(_busy || _version.Status == "publicada")" />
+                                    <MudStack Row Spacing="2" AlignItems="AlignItems.Center">
+                                        <MudSelect T="string" Label="Tipo" Value="@f.Type"
+                                                   ValueChanged="@(v => UpdateField(idx, f with { Type = v ?? "texto" }))"
+                                                   Variant="Variant.Outlined" Margin="Margin.Dense" Style="flex:1;"
+                                                   Disabled="@(_busy || _version.Status == "publicada")">
+                                            <MudSelectItem Value="@("texto")">Texto</MudSelectItem>
+                                            <MudSelectItem Value="@("numero")">Número</MudSelectItem>
+                                            <MudSelectItem Value="@("fecha")">Fecha</MudSelectItem>
+                                            <MudSelectItem Value="@("booleano")">Booleano</MudSelectItem>
+                                            <MudSelectItem Value="@("selección")">Selección</MudSelectItem>
+                                        </MudSelect>
+                                        <MudCheckBox T="bool" Label="Requerido"
+                                                     Value="@f.Required"
+                                                     ValueChanged="@(b => UpdateField(idx, f with { Required = b }))"
+                                                     Disabled="@(_busy || _version.Status == "publicada")" />
+                                    </MudStack>
+                                    @if (f.Type == "selección")
+                                    {
+                                        <MudTextField T="string" Label="Opciones (separadas por |)"
+                                                      Value="@(string.Join(" | ", f.Options ?? Array.Empty<string>()))"
+                                                      ValueChanged="@(v => UpdateField(idx, f with { Options = ParseOptions(v) }))"
+                                                      Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                      Disabled="@(_busy || _version.Status == "publicada")"
+                                                      HelperText="Ej: Buena | Regular | Mala" />
+                                    }
+                                </MudStack>
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error"
+                                               OnClick="@(() => RemoveField(idx))"
+                                               Disabled="@(_busy || _version.Status == "publicada")" />
+                            </MudStack>
+                        </MudPaper>
+                    }
+                }
+
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-3"
+                           StartIcon="@Icons.Material.Filled.Save"
+                           OnClick="SaveFieldsAsync" Disabled="@(_busy || _version.Status == "publicada")">
+                    Guardar campos
+                </MudButton>
+            </MudPaper>
+        </MudItem>
+
+        @* ───── Capture params ───── *@
+        <MudItem xs="12" md="5">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.h6" Class="mb-3">Parámetros de captura</MudText>
+                <MudNumericField T="int" Label="GPS timeout (s)"
+                                 @bind-Value="_cp.GpsTimeoutSeconds" Min="5" Max="300"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2"
+                                 Disabled="@(_busy || _version.Status == "publicada")" />
+                <MudNumericField T="double" Label="Threshold precisión (m)"
+                                 @bind-Value="_cp.GpsAccuracyThresholdM" Min="1" Max="500"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2"
+                                 Disabled="@(_busy || _version.Status == "publicada")" />
+                <MudCheckBox T="bool" Label="Permitir continuar con baja precisión"
+                             @bind-Value="_cp.AllowContinueWithLowAccuracy"
+                             Disabled="@(_busy || _version.Status == "publicada")" />
+                <MudCheckBox T="bool" Label="Permitir entrada manual de coordenadas (móvil)"
+                             @bind-Value="_cp.AllowManualCoordinatesEntryMobile"
+                             Disabled="@(_busy || _version.Status == "publicada")" />
+                <MudNumericField T="double" Label="Radio descarte modo móvil (m)"
+                                 @bind-Value="_cp.MovilRadiusM" Min="1" Max="200"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" Class="my-2"
+                                 Disabled="@(_busy || _version.Status == "publicada")" />
+                <MudDivider Class="my-2" />
+                <MudText Typo="Typo.subtitle2" Class="mb-2">Foto</MudText>
+                <MudNumericField T="int" Label="Lado mayor máx (px)"
+                                 @bind-Value="_cp.PhotoMaxLongSidePx" Min="320" Max="8192"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2"
+                                 Disabled="@(_busy || _version.Status == "publicada")" />
+                <MudNumericField T="int" Label="JPEG quality"
+                                 @bind-Value="_cp.PhotoJpegQuality" Min="40" Max="100"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2"
+                                 Disabled="@(_busy || _version.Status == "publicada")" />
+                <MudCheckBox T="bool" Label="Conservar original sin re-encodear"
+                             @bind-Value="_cp.PhotoKeepOriginal"
+                             Disabled="@(_busy || _version.Status == "publicada")" />
+                <MudCheckBox T="bool" Label="Generar thumbnail"
+                             @bind-Value="_cp.PhotoGenerateThumbnail"
+                             Disabled="@(_busy || _version.Status == "publicada")" />
+                <MudCheckBox T="bool" Label="Strip EXIF sensible (GPS embebido en foto)"
+                             @bind-Value="_cp.PhotoStripSensitiveExif"
+                             Disabled="@(_busy || _version.Status == "publicada")" />
+
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-3"
+                           StartIcon="@Icons.Material.Filled.Save"
+                           OnClick="SaveCaptureParamsAsync" Disabled="@(_busy || _version.Status == "publicada")">
+                    Guardar parámetros
+                </MudButton>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public Guid VersionId { get; set; }
+
+    private bool _loading = true;
+    private bool _busy;
+    private string? _loadError;
+    private TemplateVersionDetailDto? _version;
+    private List<FieldDefinitionDto> _fields = new();
+    private CaptureParamsForm _cp = new();
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        try
+        {
+            _version = await Api.GetTemplateVersionAsync(VersionId);
+            _fields = _version.Fields.ToList();
+            _cp = CaptureParamsForm.From(_version.CaptureParams);
+        }
+        catch (Exception ex) { _loadError = ex.Message; }
+        finally { _loading = false; }
+    }
+
+    private void AddField()
+    {
+        _fields.Add(new FieldDefinitionDto(
+            Key: $"campo_{_fields.Count + 1}",
+            Label: "Nuevo campo",
+            Type: "texto",
+            Required: false,
+            Options: null));
+    }
+
+    private void UpdateField(int index, FieldDefinitionDto updated)
+    {
+        if (index < 0 || index >= _fields.Count) return;
+        _fields[index] = updated;
+    }
+
+    private void RemoveField(int index)
+    {
+        if (index < 0 || index >= _fields.Count) return;
+        _fields.RemoveAt(index);
+    }
+
+    private static IReadOnlyList<string>? ParseOptions(string? raw) =>
+        string.IsNullOrWhiteSpace(raw)
+            ? null
+            : raw.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    private async Task SaveFieldsAsync()
+    {
+        if (_busy) return;
+        _busy = true;
+        try
+        {
+            // Serializamos como array JSON con el shape exacto del seeder.
+            var payload = _fields.Select(f => (object)new
+            {
+                key = f.Key,
+                label = f.Label,
+                type = f.Type,
+                required = f.Required,
+                options = f.Options,
+            }).ToArray();
+            var json = System.Text.Json.JsonSerializer.Serialize(payload,
+                new System.Text.Json.JsonSerializerOptions { WriteIndented = false });
+            await Api.UpdateTemplateFieldsAsync(VersionId, json);
+            Snackbar.Add("Campos guardados.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al guardar campos: {ex.Message}", Severity.Error);
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task SaveCaptureParamsAsync()
+    {
+        if (_busy) return;
+        _busy = true;
+        try
+        {
+            var json = _cp.ToJson();
+            await Api.UpdateTemplateCaptureParamsAsync(VersionId, json);
+            Snackbar.Add("Parámetros guardados.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al guardar parámetros: {ex.Message}", Severity.Error);
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task PublishAsync()
+    {
+        var ok = await Dialogs.ShowMessageBox(
+            "Publicar versión",
+            "Una vez publicada, la versión queda inmutable (RN-05). ¿Confirmás?",
+            yesText: "Publicar", noText: "Cancelar");
+        if (ok != true) return;
+
+        _busy = true;
+        try
+        {
+            await Api.PublishTemplateVersionAsync(VersionId);
+            Snackbar.Add("Versión publicada.", Severity.Success);
+            await LoadAsync(); // refresca status
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al publicar: {ex.Message}", Severity.Error);
+        }
+        finally { _busy = false; }
+    }
+
+    /// <summary>
+    /// Form-state para los capture params (como booleanos/números fuertemente tipados).
+    /// Convierte a JSON snake_case al guardar para mantener compat con el seeder.
+    /// </summary>
+    private sealed class CaptureParamsForm
+    {
+        public int GpsTimeoutSeconds { get; set; } = 30;
+        public double GpsAccuracyThresholdM { get; set; } = 50;
+        public bool AllowContinueWithLowAccuracy { get; set; } = true;
+        public bool AllowManualCoordinatesEntryMobile { get; set; }
+        public double MovilRadiusM { get; set; } = 10;
+        public int PhotoMaxLongSidePx { get; set; } = 2048;
+        public int PhotoJpegQuality { get; set; } = 85;
+        public bool PhotoKeepOriginal { get; set; }
+        public bool PhotoGenerateThumbnail { get; set; } = true;
+        public bool PhotoStripSensitiveExif { get; set; }
+        // merge_* los preservamos del JSON original al guardar (el editor no los expone aún).
+        public string TargetFormat { get; set; } = "jpg";
+        public double MergeRadiusM { get; set; } = 10;
+        public int MergeTimeWindowHours { get; set; } = 24;
+
+        public static CaptureParamsForm From(System.Text.Json.JsonElement el)
+        {
+            var f = new CaptureParamsForm();
+            if (el.ValueKind != System.Text.Json.JsonValueKind.Object) return f;
+            int? GetInt(string n) => el.TryGetProperty(n, out var v) && v.TryGetInt32(out var x) ? x : null;
+            double? GetDouble(string n) => el.TryGetProperty(n, out var v) && v.TryGetDouble(out var x) ? x : null;
+            bool? GetBool(string n) => el.TryGetProperty(n, out var v) ? v.ValueKind switch
+                {
+                    System.Text.Json.JsonValueKind.True => true,
+                    System.Text.Json.JsonValueKind.False => false,
+                    _ => (bool?)null,
+                } : null;
+            string? GetString(string n) => el.TryGetProperty(n, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String
+                ? v.GetString() : null;
+
+            f.GpsTimeoutSeconds = GetInt("gps_timeout_seconds") ?? f.GpsTimeoutSeconds;
+            f.GpsAccuracyThresholdM = GetDouble("gps_accuracy_threshold_m") ?? f.GpsAccuracyThresholdM;
+            f.AllowContinueWithLowAccuracy = GetBool("allow_continue_with_low_accuracy") ?? f.AllowContinueWithLowAccuracy;
+            f.AllowManualCoordinatesEntryMobile = GetBool("allow_manual_coordinates_entry_mobile") ?? f.AllowManualCoordinatesEntryMobile;
+            f.MovilRadiusM = GetDouble("movil_radius_m") ?? f.MovilRadiusM;
+            f.PhotoMaxLongSidePx = GetInt("photo_max_long_side_px") ?? f.PhotoMaxLongSidePx;
+            f.PhotoJpegQuality = GetInt("photo_jpeg_quality") ?? f.PhotoJpegQuality;
+            f.PhotoKeepOriginal = GetBool("photo_keep_original") ?? f.PhotoKeepOriginal;
+            f.PhotoGenerateThumbnail = GetBool("photo_generate_thumbnail") ?? f.PhotoGenerateThumbnail;
+            f.PhotoStripSensitiveExif = GetBool("photo_strip_sensitive_exif") ?? f.PhotoStripSensitiveExif;
+            f.TargetFormat = GetString("photo_target_format") ?? f.TargetFormat;
+            f.MergeRadiusM = GetDouble("merge_radius_m") ?? f.MergeRadiusM;
+            f.MergeTimeWindowHours = GetInt("merge_time_window_hours") ?? f.MergeTimeWindowHours;
+            return f;
+        }
+
+        public string ToJson() => System.Text.Json.JsonSerializer.Serialize(new
+        {
+            gps_timeout_seconds = GpsTimeoutSeconds,
+            gps_accuracy_threshold_m = GpsAccuracyThresholdM,
+            allow_continue_with_low_accuracy = AllowContinueWithLowAccuracy,
+            allow_manual_coordinates_entry_mobile = AllowManualCoordinatesEntryMobile,
+            movil_radius_m = MovilRadiusM,
+            photo_max_long_side_px = PhotoMaxLongSidePx,
+            photo_jpeg_quality = PhotoJpegQuality,
+            photo_target_format = TargetFormat,
+            photo_keep_original = PhotoKeepOriginal,
+            photo_generate_thumbnail = PhotoGenerateThumbnail,
+            photo_strip_sensitive_exif = PhotoStripSensitiveExif,
+            merge_radius_m = MergeRadiusM,
+            merge_time_window_hours = MergeTimeWindowHours,
+        });
+    }
+}

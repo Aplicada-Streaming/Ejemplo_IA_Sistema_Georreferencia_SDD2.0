@@ -1,0 +1,65 @@
+@page "/templates/new"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = "admin_raiz")]
+@inject ISgrApiClient Api
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>SGR — Nueva plantilla</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Nueva plantilla</MudText>
+
+<MudPaper Class="pa-6" Elevation="2" MaxWidth="600px">
+    <MudAlert Severity="Severity.Info" Class="mb-3" Dense="true">
+        Se creará como hija de la plantilla raíz, con una <strong>v1 borrador</strong>
+        clonada del último publicado de la raíz. Después podés editar campos y
+        parámetros antes de publicarla.
+    </MudAlert>
+
+    <MudTextField T="string" @bind-Value="_name" Label="Nombre de la plantilla *"
+                  Variant="Variant.Outlined" Class="mb-3"
+                  Counter="200" MaxLength="200"
+                  Disabled="_busy" />
+
+    @if (_error is not null)
+    {
+        <MudAlert Severity="Severity.Error" Class="mb-3">@_error</MudAlert>
+    }
+
+    <MudStack Row Spacing="2">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="CreateAsync"
+                   Disabled="@(_busy || string.IsNullOrWhiteSpace(_name))">
+            Crear y editar
+        </MudButton>
+        <MudButton Variant="Variant.Text" Color="Color.Default"
+                   Href="/templates" Disabled="_busy">
+            Cancelar
+        </MudButton>
+    </MudStack>
+</MudPaper>
+
+@code {
+    private string _name = string.Empty;
+    private bool _busy;
+    private string? _error;
+
+    private async Task CreateAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_name) || _busy) return;
+        _busy = true;
+        _error = null;
+        try
+        {
+            var result = await Api.CreateTemplateAsync(_name.Trim());
+            Snackbar.Add("Plantilla creada como borrador. Editá los campos y publicá.", Severity.Success);
+            Nav.NavigateTo($"/templates/versions/{result.DraftVersionId}/edit");
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+            _busy = false;
+        }
+    }
+}
