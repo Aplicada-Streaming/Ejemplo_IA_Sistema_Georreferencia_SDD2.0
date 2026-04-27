@@ -1,7 +1,6 @@
 @page "/surveys"
 @attribute [Authorize]
 @inject ISgrApiClient Api
-@inject NavigationManager Nav
 
 <PageTitle>SGR · Relevamientos</PageTitle>
 
@@ -36,26 +35,30 @@ else
     <MudStack Spacing="2">
         @foreach (var s in _surveys)
         {
-            <a href="@($"/surveys/{s.Id}/points/new")"
-               style="text-decoration:none; color:inherit; display:block;">
-                <MudPaper Class="pa-3" Elevation="1">
-                    <MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Spacing="2">
-                        <MudIcon Icon="@Icons.Material.Filled.Map" Color="Color.Primary" />
-                        <div style="flex:1; min-width:0;">
-                            <MudText Typo="Typo.subtitle1">@s.Name</MudText>
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                @s.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ·
-                                @s.Status
-                                @if (!string.IsNullOrWhiteSpace(s.Tags))
-                                {
-                                    <span> · @s.Tags</span>
-                                }
-                            </MudText>
-                        </div>
-                        <MudIcon Icon="@Icons.Material.Filled.AddLocationAlt" Color="Color.Primary" />
-                    </MudStack>
-                </MudPaper>
-            </a>
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudIcon Icon="@Icons.Material.Filled.Map" Color="Color.Primary" />
+                    <div style="flex:1; min-width:0;">
+                        <MudText Typo="Typo.subtitle1">@s.Name</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            @s.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ·
+                            @s.Status
+                            @if (!string.IsNullOrWhiteSpace(s.Tags))
+                            {
+                                <span> · @s.Tags</span>
+                            }
+                        </MudText>
+                    </div>
+                    <MudIconButton Icon="@Icons.Material.Filled.Map"
+                                   Color="Color.Default" Size="Size.Medium"
+                                   Href="@($"/surveys/{s.Id}/map")"
+                                   aria-label="Ver mapa" />
+                    <MudIconButton Icon="@Icons.Material.Filled.AddLocationAlt"
+                                   Color="Color.Primary" Size="Size.Medium"
+                                   Href="@($"/surveys/{s.Id}/points/new")"
+                                   aria-label="Nuevo punto" />
+                </MudStack>
+            </MudPaper>
         }
     </MudStack>
 }
@@ -85,8 +88,4 @@ else
         }
     }
 
-    // Slice 3.1: tap sobre el item lleva directo a captura de punto.
-    // En 3.4 vamos a tener una vista de detalle con mapa y aquí cambiará el destino.
-    private void NewPoint(SurveyDto s) =>
-        Nav.NavigateTo($"/surveys/{s.Id}/points/new");
 }

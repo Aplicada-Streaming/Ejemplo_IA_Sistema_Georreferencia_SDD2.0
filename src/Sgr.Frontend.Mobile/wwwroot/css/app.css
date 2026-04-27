@@ -2,6 +2,35 @@
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
 }
 
+/*
+    Safe-area para Android edge-to-edge (status bar arriba, navigation bar abajo) e iOS
+    (notch + home indicator). El meta viewport ya incluye `viewport-fit=cover`, lo que
+    habilita las env() vars. Aplicamos al root para que MudAppBar/MudMainContent queden
+    naturalmente despejados de los system bars.
+    Si el inset es 0 (desktop / emulator sin barra), las env() devuelven 0 y no afecta.
+*/
+body {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    box-sizing: border-box;
+    min-height: 100vh;
+}
+
+/* MudAppBar usa position:fixed y se posiciona contra el viewport ignorando el padding del body.
+   Lo bajamos por env(inset-top) para que no quede tapado por la status bar. */
+.mud-appbar {
+    margin-top: env(safe-area-inset-top);
+}
+
+/* MudMainContent ya reserva padding-top = var(--mud-appbar-height). Le sumamos el inset
+   para que el contenido tampoco quede tapado, y agregamos padding-bottom para la nav bar. */
+.mud-main-content {
+    padding-top: calc(var(--mud-appbar-height, 64px) + env(safe-area-inset-top)) !important;
+    padding-bottom: env(safe-area-inset-bottom) !important;
+}
+
 a, .btn-link {
     color: #006bb7;
 }

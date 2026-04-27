@@ -110,6 +110,12 @@
                OnClick="ResetAndContinue" Disabled="_saving">
         Limpiar (otro punto)
     </MudButton>
+
+    <MudButton Variant="Variant.Text" Color="Color.Default" FullWidth="true" Class="mt-1"
+               StartIcon="@Icons.Material.Filled.Map"
+               Href="@($"/surveys/{SurveyId}/map")">
+        Ver puntos en el mapa
+    </MudButton>
 </MudPaper>
 
 @code {

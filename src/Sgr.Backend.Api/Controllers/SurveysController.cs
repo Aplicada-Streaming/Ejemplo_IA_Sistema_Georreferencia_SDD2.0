@@ -14,11 +14,16 @@ public sealed class SurveysController : ControllerBase
 {
     private readonly ICreateSurveyService _create;
     private readonly IListSurveysService _list;
+    private readonly IListSurveyPointsService _listPoints;
 
-    public SurveysController(ICreateSurveyService create, IListSurveysService list)
+    public SurveysController(
+        ICreateSurveyService create,
+        IListSurveysService list,
+        IListSurveyPointsService listPoints)
     {
         _create = create;
         _list = list;
+        _listPoints = listPoints;
     }
 
     /// <summary>List surveys visible to the current user.</summary>
@@ -58,6 +63,21 @@ public sealed class SurveysController : ControllerBase
 
         var result = await _create.CreateAsync(request, current, ct);
         return CreatedAtAction(nameof(List), new { }, result);
+    }
+
+    /// <summary>List points (no borrados) of a survey, ordered by CreatedAt ASC.
+    /// Visibilidad por rol — admin todo, jefe por área, relevador propio (US-09 cierra el filtrado completo).</summary>
+    [HttpGet("{id:guid}/points")]
+    [ProducesResponseType(typeof(IReadOnlyList<PointDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IReadOnlyList<PointDto>>> ListPoints(
+        Guid id,
+        CancellationToken ct)
+    {
+        var current = CurrentUserAccessor.FromPrincipal(User);
+        var result = await _listPoints.ListAsync(id, current, ct);
+        return Ok(result);
     }
 }
 

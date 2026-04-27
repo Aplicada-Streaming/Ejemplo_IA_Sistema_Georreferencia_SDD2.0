@@ -8,6 +8,7 @@ public enum SurveyErrorCode
     InvalidPayload = 4,
     Forbidden = 5,
     AreaUnknown = 6,
+    NotFound = 7,
 }
 
 public sealed class SurveyException : Exception

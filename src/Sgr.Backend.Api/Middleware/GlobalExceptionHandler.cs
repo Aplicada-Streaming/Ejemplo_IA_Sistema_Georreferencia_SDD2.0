@@ -82,6 +82,8 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
                 (StatusCodes.Status403Forbidden, "Forbidden", ex.Message),
             SurveyErrorCode.InvalidPayload =>
                 (StatusCodes.Status400BadRequest, "Bad Request", ex.Message),
+            SurveyErrorCode.NotFound =>
+                (StatusCodes.Status404NotFound, "Not Found", ex.Message),
             _ => (StatusCodes.Status400BadRequest, "Bad Request", ex.Message),
         };
 }

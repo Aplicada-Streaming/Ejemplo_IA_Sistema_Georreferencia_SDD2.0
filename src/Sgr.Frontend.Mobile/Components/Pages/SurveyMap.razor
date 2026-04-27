@@ -1,0 +1,96 @@
+@page "/surveys/{SurveyId:guid}/map"
+@attribute [Authorize]
+@inject ISgrApiClient Api
+@inject NavigationManager Nav
+
+<PageTitle>SGR · Mapa</PageTitle>
+
+<MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+    <MudText Typo="Typo.h6">Puntos del relevamiento</MudText>
+    <MudIconButton Icon="@Icons.Material.Filled.Refresh" Color="Color.Primary"
+                   OnClick="LoadAsync" Disabled="_loading" />
+</MudStack>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+}
+else if (_error is not null)
+{
+    <MudAlert Severity="Severity.Warning" Class="mb-2">@_error</MudAlert>
+    <MudButton Variant="Variant.Outlined" OnClick="LoadAsync">Reintentar</MudButton>
+}
+else
+{
+    @if (_points.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info" Class="mb-2"
+                  Icon="@Icons.Material.Filled.MapsHomeWork">
+            Este relevamiento todavía no tiene puntos. Vista del mapa centrada por defecto.
+        </MudAlert>
+    }
+    else
+    {
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">
+            @_points.Count punto@(_points.Count == 1 ? "" : "s") cargado@(_points.Count == 1 ? "" : "s").
+        </MudText>
+    }
+
+    <LeafletMap Markers="@_markers" Center="@_center" Height="65vh" />
+
+    <MudStack Row Spacing="2" Class="mt-3">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                   StartIcon="@Icons.Material.Filled.AddLocationAlt"
+                   Href="@($"/surveys/{SurveyId}/points/new")">
+            Nuevo punto
+        </MudButton>
+        <MudButton Variant="Variant.Text" Color="Color.Default"
+                   StartIcon="@Icons.Material.Filled.ArrowBack"
+                   Href="/surveys">
+            Volver
+        </MudButton>
+    </MudStack>
+}
+
+@code {
+    [Parameter] public Guid SurveyId { get; set; }
+
+    private bool _loading = true;
+    private string? _error;
+    private IReadOnlyList<PointDto> _points = Array.Empty<PointDto>();
+    private IReadOnlyList<LeafletMap.MapMarker> _markers = Array.Empty<LeafletMap.MapMarker>();
+    private LeafletMap.MapPoint? _center;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _points = await Api.ListPointsAsync(SurveyId);
+            _markers = _points.Select(p => new LeafletMap.MapMarker(
+                Latitude: p.Latitude,
+                Longitude: p.Longitude,
+                Title: p.Title ?? $"Punto {p.Id.ToString()[..8]}",
+                Description: p.Description,
+                AccuracyM: p.AccuracyM,
+                CaptureMode: p.CaptureMode,
+                CreatedAt: p.CreatedAt)).ToArray();
+
+            // Centro: primer punto si existe; sino dejamos null para que el JS use su default
+            // (Buenos Aires) y el usuario ya verá la vista regional cuando cree el primero.
+            if (_points.Count > 0)
+                _center = new LeafletMap.MapPoint(_points[0].Latitude, _points[0].Longitude);
+        }
+        catch (Exception ex)
+        {
+            _error = $"No pude cargar los puntos: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}
