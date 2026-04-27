@@ -8,6 +8,7 @@ using Sgr.Backend.Api.Middleware;
 using Sgr.Backend.Api.Startup;
 using Sgr.Modules.Identity;
 using Sgr.Modules.Identity.Authentication;
+using Sgr.Modules.Storage;
 using Sgr.Modules.Surveys;
 using Sgr.Modules.Sync;
 using Sgr.Modules.Templates;
@@ -37,7 +38,8 @@ try
         .AddSgrIdentity(builder.Configuration)
         .AddSgrTemplates()
         .AddSgrSurveys()
-        .AddSgrSync();
+        .AddSgrSync()
+        .AddSgrStorage(builder.Configuration);
 
     builder.Services.Configure<SeedOptions>(builder.Configuration.GetSection(SeedOptions.SectionName));
 

@@ -29,6 +29,7 @@
     <ProjectReference Include="..\..\src\Sgr.Modules.Surveys\Sgr.Modules.Surveys.csproj" />
     <ProjectReference Include="..\..\src\Sgr.Modules.Templates\Sgr.Modules.Templates.csproj" />
     <ProjectReference Include="..\..\src\Sgr.Modules.Points\Sgr.Modules.Points.csproj" />
+    <ProjectReference Include="..\..\src\Sgr.Modules.Storage\Sgr.Modules.Storage.csproj" />
   </ItemGroup>
 
 </Project>
