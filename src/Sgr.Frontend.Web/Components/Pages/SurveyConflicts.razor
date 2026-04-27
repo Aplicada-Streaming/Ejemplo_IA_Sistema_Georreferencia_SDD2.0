@@ -77,18 +77,17 @@ else
                         @if (c.Status == "pendiente")
                         {
                             <MudStack Row Spacing="2">
-                                @if (c.Type != "post_close")
-                                {
-                                    <MudButton Variant="Variant.Filled" Color="Color.Warning"
-                                               StartIcon="@Icons.Material.Filled.Replay"
-                                               OnClick="@(() => ResolveAsync(c, "Revert"))" Disabled="@_busy">
-                                        Revertir al valor intentado
-                                    </MudButton>
-                                }
+                                <MudButton Variant="Variant.Filled" Color="Color.Warning"
+                                           StartIcon="@Icons.Material.Filled.Replay"
+                                           OnClick="@(() => ResolveAsync(c, "Revert"))" Disabled="@_busy">
+                                    @(c.Type == "post_close"
+                                        ? "Reabrir survey + aplicar"
+                                        : "Revertir al valor intentado")
+                                </MudButton>
                                 <MudButton Variant="Variant.Outlined" Color="Color.Default"
                                            StartIcon="@Icons.Material.Filled.Check"
                                            OnClick="@(() => ResolveAsync(c, "KeepCurrent"))" Disabled="@_busy">
-                                    Mantener valor actual
+                                    @(c.Type == "post_close" ? "Descartar captura" : "Mantener valor actual")
                                 </MudButton>
                             </MudStack>
                         }

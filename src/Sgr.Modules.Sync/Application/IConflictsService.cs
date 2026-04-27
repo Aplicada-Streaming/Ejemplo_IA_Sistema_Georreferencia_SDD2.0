@@ -20,9 +20,10 @@ namespace Sgr.Modules.Sync.Application;
 ///   con el <c>attempted_value</c> del conflicto, autorizado por el actor JWT.
 ///   Vuelve a pasar por el applier — el valor revertido gana porque su timestamp
 ///   es ahora el más reciente (US-20 CA-20.2).
-/// - <c>revert</c> (post_close): el applier ya descartó la captura. Para realmente
-///   aplicarla habría que reabrir el survey — fuera del MVP de Slice 9; por ahora
-///   la acción <c>revert</c> sobre un post_close devuelve <c>NotImplemented</c>.
+/// - <c>revert</c> (post_close, DT-S9.1): reabre el survey, audita el reopen,
+///   y reemite el <c>point.created</c> con el payload original como evento nuevo.
+///   El survey queda <b>abierto</b> tras la operación — si el admin quiere
+///   re-cerrarlo, lo hace explícitamente vía <c>POST /surveys/{id}/close</c>.
 /// </summary>
 public interface IConflictsService
 {
@@ -123,9 +124,10 @@ public sealed class ConflictsService : IConflictsService
 
             case ConflictActions.Revert:
                 if (conflict.Type == ConflictTypes.PostClose)
-                    throw new NotSupportedException(
-                        "Para conflictos post-cierre, primero reabrir el survey y reenviar el evento. " +
-                        "(Reapertura automática queda fuera del MVP de Slice 9.)");
+                {
+                    await RevertPostCloseAsync(conflict, actor, now, ct);
+                    break;
+                }
 
                 if (string.IsNullOrEmpty(conflict.FieldKey) || conflict.PointId is null)
                     throw new InvalidOperationException(
@@ -156,6 +158,60 @@ public sealed class ConflictsService : IConflictsService
 
         await _db.SaveChangesAsync(ct);
         return ToDto(conflict);
+    }
+
+    private async Task RevertPostCloseAsync(
+        Conflict conflict, CurrentUserContext actor, DateTime now, CancellationToken ct)
+    {
+        var survey = await _db.Surveys.FirstOrDefaultAsync(s => s.Id == conflict.SurveyId, ct)
+            ?? throw new InvalidOperationException($"Survey {conflict.SurveyId} no existe.");
+
+        // 1. Reabrir el survey si está cerrado. Audit del cambio.
+        if (survey.Status == SurveyStatus.Cerrado)
+        {
+            survey.Reopen(now);
+            _db.AuditEvents.Add(AuditEvent.Create(
+                id: Guid.NewGuid(),
+                entityType: AuditEntityType.Survey,
+                entityId: survey.Id,
+                eventType: AuditEventType.FieldUpdated,
+                fieldKey: "status",
+                oldValueJson: System.Text.Json.JsonSerializer.Serialize(SurveyStatus.Cerrado),
+                newValueJson: System.Text.Json.JsonSerializer.Serialize(SurveyStatus.Abierto),
+                authorId: actor.UserId,
+                origin: AuditOrigin.WebEdit,
+                deviceId: null,
+                timestampOriginal: now,
+                appliedAt: now));
+
+            // SaveChanges acá: el applier consulta Surveys con AsNoTracking() para validar
+            // RN-08, así que el reopen tiene que estar persistido antes de invocarlo.
+            await _db.SaveChangesAsync(ct);
+        }
+
+        // 2. Reemitir el point.created original como evento NUEVO (nuevo EventId).
+        // El attemptedValueJson tiene el payload del create (surveyId/lat/lng/captureMode).
+        // Con el survey ya abierto, el applier no debería rechazarlo por RN-08.
+        if (conflict.PointId is null)
+            throw new InvalidOperationException("Conflict post_close sin pointId.");
+
+        var replayEvent = new SyncEventDto(
+            EventId: Guid.NewGuid(),
+            EntityType: AuditEntityType.Point,
+            EntityId: conflict.PointId.Value,
+            EventType: AuditEventType.Created,
+            Field: null,
+            OldValueJson: null,
+            NewValueJson: conflict.AttemptedValueJson,
+            AuthorId: actor.UserId,
+            Origin: AuditOrigin.WebManualUpload,
+            DeviceId: null,
+            TimestampOriginal: now);
+
+        await _applier.ApplyAsync(new[] { replayEvent }, ct);
+
+        conflict.MarkResolved(ConflictStatus.ResueltoRevertido, actor.UserId, now,
+            note: $"Revertido post-cierre: survey reabierto + evento {replayEvent.EventId} aplicado.");
     }
 
     private static ConflictDto ToDto(Conflict c) => new(

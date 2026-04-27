@@ -30,7 +30,7 @@ para que Sprint 11 los priorice contra bugs de estabilización antes del release
 
 | ID | Severidad | Descripción | Archivos clave |
 |---|---|---|---|
-| DT-S6.1 | 🟡 Media | UI hint visual "modo lectura" cuando el usuario no es creador/dueño del punto. El backend ya enforce con 403/RejectedForbidden, pero la web no deshabilita botones de edición preventivamente. | src/Sgr.Frontend.Web/Components/Pages/SurveyDetail.razor (gating de botones por permiso) |
+| DT-S6.1 | ✅ Sprint 11 | Banner informacional en SurveyDetail visible sólo para relevadores recordando RN-01 (sólo el creador del punto o el dueño del survey pueden mutarlo desde el móvil). Para admin/jefe no aparece porque tienen permiso global. La web no edita puntos directamente: la deshabilitación preventiva de botones no aplicaba. | src/Sgr.Frontend.Web/Components/Pages/SurveyDetail.razor |
 
 ### Slice 7 — Carga lote EXIF (E.7 commit Slice 7)
 
@@ -50,7 +50,7 @@ para que Sprint 11 los priorice contra bugs de estabilización antes del release
 
 | ID | Severidad | Descripción | Archivos clave |
 |---|---|---|---|
-| DT-S9.1 | 🟡 Media | Acción `Revert` sobre conflicts tipo `post_close` lanza `NotImplemented`. Para soportarlo: reabrir el survey (cerrado→abierto + AuditEvent), reaplicar el evento original, dejarlo abierto o cerrarlo de nuevo. | src/Sgr.Modules.Sync/Application/IConflictsService.cs (rama `ConflictActions.Revert` para `PostClose`) |
+| DT-S9.1 | ✅ Sprint 11 | `Revert` sobre `post_close` ahora reabre el survey (con AuditEvent del cambio de status), persiste el reopen, y reemite el `point.created` con el payload original como evento nuevo. El survey queda abierto — re-cerrarlo es decisión explícita del admin. `Survey.Reopen()` agregado al dominio. Test integración cubre el flujo end-to-end. | src/Sgr.Domain/Surveys/Survey.cs (`Reopen`) + src/Sgr.Modules.Sync/Application/IConflictsService.cs |
 | DT-S9.2 | 🟢 Baja | Notificación post-sync con badge/conteo (CA-19.3). Hoy el panel se actualiza al entrar; no hay push activo al dashboard cuando llegan conflicts nuevos. | Frontend Web — agregar SignalR o polling en MainLayout |
 
 ### Slice 10 — Fusión puntos (E.10 commit Slice 10)
@@ -58,7 +58,7 @@ para que Sprint 11 los priorice contra bugs de estabilización antes del release
 | ID | Severidad | Descripción | Archivos clave |
 |---|---|---|---|
 | DT-S10.1 | 🟡 Media | **Selector field-by-field** en la fusión (CA-22.2 partial). Hoy el `kept` hereda todos los campos; el dropped pierde los valores que tenía y el kept no los pisa. UX más rica permitiría elegir, por cada campo divergente, si queda el de A o el de B. | src/Sgr.Modules.Sync/Application/IMergeCandidatesService.cs + MergeCandidates.razor |
-| DT-S10.2 | 🟡 Media | **Mini-mapa lado a lado** + galerías de fotos en la pantalla de detail del candidato. Hoy se muestran metadatos de cada punto en cards, sin visualización geográfica. | src/Sgr.Frontend.Web/Components/Pages/MergeCandidates.razor |
+| DT-S10.2 | ✅ Sprint 11 (parcial) | Mini-mapa con ambos puntos (markers A/B + centro automático) en la card de cada candidato. Galerías de fotos lado a lado siguen pendientes — el patrón actual abre el `PhotoGalleryDialog` por cada punto, integrarlo en la card de fusión queda como UX nice-to-have. | src/Sgr.Frontend.Web/Components/Pages/MergeCandidates.razor |
 | DT-S10.3 | 🟢 Baja | `Photo.MoveToPoint()` en lugar de reflection para reasignar fotos del dropped al kept. Igual que DT-S7.1. | Mismo: src/Sgr.Domain/Photos/Photo.cs |
 | DT-S10.4 | 🟢 Baja | Detector RN-09 sólo se dispara en `point.created`. Si un punto se MUEVE a una zona donde había otro punto cercano (vía `coords` field_updated), no re-detecta. RN-09 lo menciona implícitamente; agregar hook en `ApplyPointFieldUpdatedAsync` cuando el field es `coords`. | src/Sgr.Modules.Sync/Application/IEventApplier.cs |
 
@@ -77,17 +77,23 @@ para que Sprint 11 los priorice contra bugs de estabilización antes del release
 
 ## Sugerencia de priorización para Sprint 11
 
-**Resueltas en Sprint 11 (commit `<hash>`)**:
+**Resueltas en Sprint 11**:
+- ✅ DT-X.1: CI pipeline GitHub Actions con solution filter sin MAUI (commit Sprint 11 #1)
 - ✅ DT-S8.1 + DT-S8.2: hot-swap storage activo (factory dinámico con cache TTL 30s)
-- ✅ DT-X.1: CI pipeline GitHub Actions con solution filter sin MAUI
+- ✅ DT-S9.1: post_close revert reabre survey + reaplica evento
+- ✅ DT-S10.2: mini-mapa lado a lado en pantalla de fusión (galerías de fotos siguen pendientes)
+- ✅ DT-S6.1: banner informacional para relevadores en SurveyDetail
 
 **Pendientes priorizadas**:
-1. **DT-S6.1** (media): UI lectura tiene gran impacto en percepción de calidad.
-2. **DT-S10.1, DT-S10.2** (media): la fusión es Could Have; mejoras visuales pueden esperar a v2.
-3. **DT-S9.1** (media): post-close revert es edge case; documentar workaround manual mientras tanto.
-4. **DT-X.2** (media): tests E2E con SQL real via Testcontainers.
-5. **DT-X.3** (media): tests integración para adapters S3/FTP/SFTP.
-6. **Resto** (baja): cleanup tras MVP.
+1. **DT-S10.1** (media): selector field-by-field en la fusión (el `kept` hereda todo).
+2. **DT-X.2** (media): tests E2E con SQL real via Testcontainers.
+3. **DT-X.3** (media): tests integración para adapters S3/FTP/SFTP.
+4. **DT-S9.2** (baja): notificación push post-sync (SignalR).
+5. **DT-S7.1 / DT-S10.3** (baja): `Photo.MoveToPoint()` limpio en lugar de reflection.
+6. **DT-S10.4** (baja): detector RN-09 también en `coords` field_updated.
+7. **DT-S8.3** (baja): DataProtection con keys persistidas para deploy multi-instancia.
+8. **DT-S3.1** (baja): docs menores con nomenclatura "modo móvil" residual.
+9. **DT-X.4** (baja): logging dashboard (Seq/ELK).
 
 ---
 

@@ -120,6 +120,55 @@ public class ConflictsTests : IClassFixture<SgrApiFactory>
         resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
+    [Fact(DisplayName = "DT-S9.1 — Revert sobre post_close reabre survey y aplica el evento")]
+    public async Task DT_S9_1_post_close_revert_reopens_and_applies()
+    {
+        var (clientA, ownerId, surveyId) = await SetupOwnedSurveyAsync();
+
+        // Cerrar el survey directamente en DB para que el applier rechace capturas posteriores.
+        var closeAt = DateTime.UtcNow.AddDays(-2);
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<Sgr.Persistence.SgrDbContext>();
+            var s = db.Surveys.Single(x => x.Id == surveyId);
+            typeof(Sgr.Domain.Surveys.Survey).GetProperty("Status")!.SetValue(s, "cerrado");
+            typeof(Sgr.Domain.Surveys.Survey).GetProperty("ClosedAt")!.SetValue(s, closeAt);
+            await db.SaveChangesAsync();
+        }
+
+        // Capturar un punto post-cierre → genera conflict post_close.
+        var pointId = Guid.NewGuid();
+        var lateEvent = NewPointCreated(pointId, surveyId, ownerId, "mobile_capture", "detenido",
+            -34.6m, -58.4m, closeAt.AddHours(1));
+        var resp = await PushAsync(clientA, new[] { lateEvent });
+        resp.Results.Single().Outcome.Should().Be(SyncOutcome.RejectedPostClose);
+
+        // Jefe revierte el conflict → reabre survey + aplica.
+        var jefeClient = _factory.CreateClient();
+        var jefeToken = await TestAuthHelper.LoginAsync(jefeClient, "jefe@vialidad.local", "Jefe1234!");
+        jefeClient.UseBearer(jefeToken);
+
+        var conflicts = await jefeClient.GetFromJsonAsync<List<ConflictApiDto>>(
+            $"/api/v1/conflicts?surveyId={surveyId}&type=post_close");
+        var conflict = conflicts!.Single(c => c.EventId == lateEvent.EventId);
+
+        var revertResp = await jefeClient.PostAsJsonAsync(
+            $"/api/v1/conflicts/{conflict.Id}/resolve", new { Action = "Revert" });
+        revertResp.StatusCode.Should().Be(HttpStatusCode.OK);
+        var dto = await revertResp.Content.ReadFromJsonAsync<ConflictApiDto>();
+        dto!.Status.Should().Be("resuelto_revertido");
+
+        // Verificar: survey reabierto + punto creado.
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<Sgr.Persistence.SgrDbContext>();
+            var survey = db.Surveys.Single(s => s.Id == surveyId);
+            survey.Status.Should().Be("abierto");
+            survey.ClosedAt.Should().BeNull();
+            db.Points.Any(p => p.Id == pointId).Should().BeTrue();
+        }
+    }
+
     // ----- helpers -----
 
     private async Task<(HttpClient client, Guid conflictId)> CreateLwwConflictAndGetJefeClientAsync()

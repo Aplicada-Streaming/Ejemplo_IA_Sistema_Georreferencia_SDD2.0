@@ -65,4 +65,19 @@ public sealed class Survey : Entity
         ClosedAt = when;
         UpdatedAt = when;
     }
+
+    /// <summary>
+    /// Reabre un relevamiento cerrado. Usado por la resolución de conflictos post-cierre
+    /// (DT-S9.1): si el admin/jefe decide aplicar una captura tardía, primero se reabre
+    /// y luego se reaplica el evento via sync.
+    /// </summary>
+    public void Reopen(DateTime when)
+    {
+        if (Status == SurveyStatus.Abierto) return;
+        if (Status == SurveyStatus.EliminadoLogico)
+            throw new InvalidOperationException("No se puede reabrir un relevamiento eliminado.");
+        Status = SurveyStatus.Abierto;
+        ClosedAt = null;
+        UpdatedAt = when;
+    }
 }

@@ -46,9 +46,13 @@ else
                         <MudGrid Spacing="2">
                             <MudItem xs="12" md="6">
                                 <MudPaper Class="pa-3" Elevation="0" Style="background:#e3f2fd;">
-                                    <MudText Typo="Typo.caption">Punto A</MudText>
+                                    <MudText Typo="Typo.caption" Style="color:#1976d2;">⬤ Punto A</MudText>
                                     <MudText Typo="Typo.body2">
                                         Id: <code>@c.PointAId.ToString()[..8]</code><br />
+                                        @if (PointFor(c.PointAId) is { } pa)
+                                        {
+                                            <span>@FormatCoords(pa.Latitude, pa.Longitude)<br /></span>
+                                        }
                                         Creado por: @c.PointACreatedBy.ToString()[..8]<br />
                                         @c.PointACreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
                                     </MudText>
@@ -56,15 +60,30 @@ else
                             </MudItem>
                             <MudItem xs="12" md="6">
                                 <MudPaper Class="pa-3" Elevation="0" Style="background:#fff3e0;">
-                                    <MudText Typo="Typo.caption">Punto B</MudText>
+                                    <MudText Typo="Typo.caption" Style="color:#f57c00;">⬤ Punto B</MudText>
                                     <MudText Typo="Typo.body2">
                                         Id: <code>@c.PointBId.ToString()[..8]</code><br />
+                                        @if (PointFor(c.PointBId) is { } pb)
+                                        {
+                                            <span>@FormatCoords(pb.Latitude, pb.Longitude)<br /></span>
+                                        }
                                         Creado por: @c.PointBCreatedBy.ToString()[..8]<br />
                                         @c.PointBCreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
                                     </MudText>
                                 </MudPaper>
                             </MudItem>
                         </MudGrid>
+
+                        @* DT-S10.2: mini-mapa con ambos puntos para que el usuario vea la
+                           geometría antes de fusionar / mantener separado. *@
+                        @{
+                            var markers = MarkersFor(c);
+                            var center = MapCenterFor(c);
+                        }
+                        @if (markers.Count == 2 && center is not null)
+                        {
+                            <LeafletMap Markers="@markers" Center="@center" Height="220px" InitialZoom="20" />
+                        }
 
                         @if (c.Status == "pendiente")
                         {
@@ -122,6 +141,7 @@ else
     private int _activeTab;
     private List<MergeCandidateDto> _pending = new();
     private List<MergeCandidateDto> _resolved = new();
+    private Dictionary<Guid, PointDto> _pointsById = new();
 
     protected override Task OnInitializedAsync() => LoadAsync();
 
@@ -133,12 +153,46 @@ else
             _pending = (await Api.ListMergeCandidatesAsync(SurveyId)).ToList();
             var all = await Api.ListMergeCandidatesAsync(SurveyId, status: "all");
             _resolved = all.Where(c => c.Status != "pendiente").ToList();
+
+            // DT-S10.2: precargar todos los puntos del survey una sola vez para resolver
+            // las coords de cada candidato sin lookups individuales.
+            var points = await Api.ListPointsAsync(SurveyId);
+            _pointsById = points.ToDictionary(p => p.Id);
         }
         catch (Exception ex)
         {
             Snackbar.Add($"No pude cargar candidatos: {ex.Message}", Severity.Error);
         }
         finally { _loading = false; }
+    }
+
+    private PointDto? PointFor(Guid id) =>
+        _pointsById.TryGetValue(id, out var p) ? p : null;
+
+    private static string FormatCoords(decimal lat, decimal lng) =>
+        $"{lat.ToString("0.000000", System.Globalization.CultureInfo.InvariantCulture)}, " +
+        $"{lng.ToString("0.000000", System.Globalization.CultureInfo.InvariantCulture)}";
+
+    private List<LeafletMap.MapMarker> MarkersFor(MergeCandidateDto c)
+    {
+        var list = new List<LeafletMap.MapMarker>();
+        if (PointFor(c.PointAId) is { } pa)
+            list.Add(new LeafletMap.MapMarker(pa.Id, pa.Latitude, pa.Longitude,
+                $"Punto A — {pa.Id.ToString()[..8]}", null, pa.AccuracyM, pa.CaptureMode, pa.CreatedAt));
+        if (PointFor(c.PointBId) is { } pb)
+            list.Add(new LeafletMap.MapMarker(pb.Id, pb.Latitude, pb.Longitude,
+                $"Punto B — {pb.Id.ToString()[..8]}", null, pb.AccuracyM, pb.CaptureMode, pb.CreatedAt));
+        return list;
+    }
+
+    private LeafletMap.MapPoint? MapCenterFor(MergeCandidateDto c)
+    {
+        var pa = PointFor(c.PointAId);
+        var pb = PointFor(c.PointBId);
+        if (pa is null || pb is null) return null;
+        return new LeafletMap.MapPoint(
+            (pa.Latitude + pb.Latitude) / 2m,
+            (pa.Longitude + pb.Longitude) / 2m);
     }
 
     private List<MergeCandidateDto> CurrentList() => _activeTab == 0 ? _pending : _resolved;

@@ -98,6 +98,20 @@ else if (_survey is not null)
         </MudStack>
     </MudPaper>
 
+    @* DT-S6.1 — banner informacional para relevadores que recuerda RN-01:
+       sólo el creador del punto o el dueño del relevamiento pueden mutarlo.
+       Admin / jefe ven todo en modo edición, así que no necesitan el aviso. *@
+    <AuthorizeView Roles="relevador" Context="readOnlyAuth">
+        <Authorized>
+            <MudAlert Severity="Severity.Warning" Class="mb-3" Dense="true"
+                      Icon="@Icons.Material.Filled.Lock">
+                Como relevador, desde la web este relevamiento es de <strong>solo lectura</strong>.
+                Sólo podés editar <em>tus propios puntos</em> desde el móvil; los puntos de otros
+                colaboradores los gestiona el dueño del relevamiento (RN-01).
+            </MudAlert>
+        </Authorized>
+    </AuthorizeView>
+
     @* ---- Mapa con marcadores ---- *@
     @if (_points.Count == 0)
     {
