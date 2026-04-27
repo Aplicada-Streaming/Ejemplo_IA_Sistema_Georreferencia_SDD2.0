@@ -5,6 +5,7 @@
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
 @inject IDialogService Dialogs
+@inject IJSRuntime JS
 
 <PageTitle>SGR — Detalle</PageTitle>
 
@@ -44,19 +45,29 @@ else if (_survey is not null)
                 </MudText>
             </div>
 
-            @* Acciones por rol — sólo jefe del área o admin pueden cerrar *@
-            <AuthorizeView Roles="admin_raiz,jefe_area" Context="auth">
-                <Authorized>
-                    @if (_survey.Status == "abierto")
-                    {
-                        <MudButton Variant="Variant.Outlined" Color="Color.Warning"
-                                   StartIcon="@Icons.Material.Filled.Lock"
-                                   OnClick="CloseAsync" Disabled="_busy">
-                            Cerrar relevamiento
-                        </MudButton>
-                    }
-                </Authorized>
-            </AuthorizeView>
+            @* Acciones — exportación visible para todos los que ven el survey;
+               cierre sólo admin/jefe del área. *@
+            <MudStack Row Spacing="1">
+                <MudMenu Label="Exportar" StartIcon="@Icons.Material.Filled.Download"
+                         Variant="Variant.Outlined" Color="Color.Default" Disabled="_busy">
+                    <MudMenuItem OnClick="@(() => ExportAsync("xlsx"))">Excel (.xlsx)</MudMenuItem>
+                    <MudMenuItem OnClick="@(() => ExportAsync("csv"))">CSV (separador ;)</MudMenuItem>
+                    <MudMenuItem OnClick="@(() => ExportAsync("geojson"))">GeoJSON</MudMenuItem>
+                    <MudMenuItem OnClick="@(() => ExportAsync("zip"))">ZIP (XLSX + CSV + GeoJSON + fotos)</MudMenuItem>
+                </MudMenu>
+                <AuthorizeView Roles="admin_raiz,jefe_area" Context="auth">
+                    <Authorized>
+                        @if (_survey.Status == "abierto")
+                        {
+                            <MudButton Variant="Variant.Outlined" Color="Color.Warning"
+                                       StartIcon="@Icons.Material.Filled.Lock"
+                                       OnClick="CloseAsync" Disabled="_busy">
+                                Cerrar relevamiento
+                            </MudButton>
+                        }
+                    </Authorized>
+                </AuthorizeView>
+            </MudStack>
         </MudStack>
     </MudPaper>
 
@@ -132,6 +143,35 @@ else if (_survey is not null)
         finally
         {
             _loading = false;
+        }
+    }
+
+    private async Task ExportAsync(string format)
+    {
+        if (_busy) return;
+        _busy = true;
+        try
+        {
+            var bytes = await Api.ExportSurveyAsync(SurveyId, format);
+            var (mime, ext) = format switch
+            {
+                "csv" => ("text/csv;charset=utf-8", "csv"),
+                "xlsx" => ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx"),
+                "geojson" => ("application/geo+json", "geojson"),
+                "zip" => ("application/zip", "zip"),
+                _ => ("application/octet-stream", "bin"),
+            };
+            var name = $"survey-{_survey?.Name?.Replace(' ', '_') ?? SurveyId.ToString()[..8]}.{ext}";
+            await JS.InvokeVoidAsync("sgrDownload.fromBase64", name, mime, Convert.ToBase64String(bytes));
+            Snackbar.Add($"Exportación {format.ToUpperInvariant()} lista.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"No pude exportar: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
         }
     }
 

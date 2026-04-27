@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Sgr.Backend.Api.Startup;
 using Sgr.Domain.Audit;
 using Sgr.Modules.Surveys.Application;
 using Sgr.Modules.Templates.Application;
@@ -19,6 +20,8 @@ public sealed class SurveysController : ControllerBase
     private readonly IGetSurveyService _get;
     private readonly ICloseSurveyService _close;
     private readonly IGetTemplateVersionService _getTemplate;
+    private readonly IExportSurveyService _export;
+    private readonly SurveyZipBundler _zipBundler;
 
     public SurveysController(
         ICreateSurveyService create,
@@ -26,7 +29,9 @@ public sealed class SurveysController : ControllerBase
         IListSurveyPointsService listPoints,
         IGetSurveyService get,
         ICloseSurveyService close,
-        IGetTemplateVersionService getTemplate)
+        IGetTemplateVersionService getTemplate,
+        IExportSurveyService export,
+        SurveyZipBundler zipBundler)
     {
         _create = create;
         _list = list;
@@ -34,6 +39,8 @@ public sealed class SurveysController : ControllerBase
         _get = get;
         _close = close;
         _getTemplate = getTemplate;
+        _export = export;
+        _zipBundler = zipBundler;
     }
 
     /// <summary>List surveys visible to the current user.</summary>
@@ -112,6 +119,42 @@ public sealed class SurveysController : ControllerBase
         var current = CurrentUserAccessor.FromPrincipal(User);
         var result = await _close.CloseAsync(id, current, ct);
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Exporta el relevamiento en CSV o GeoJSON. <c>format</c> = csv | geojson.
+    /// El CSV trae BOM UTF-8 para que Excel lo abra con acentos OK.
+    /// </summary>
+    [HttpGet("{id:guid}/export")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Export(
+        Guid id,
+        [FromQuery] string format,
+        CancellationToken ct)
+    {
+        var current = CurrentUserAccessor.FromPrincipal(User);
+        var fmt = (format ?? "csv").Trim().ToLowerInvariant();
+        return fmt switch
+        {
+            "csv" => File(await _export.GenerateCsvAsync(id, current, ct),
+                "text/csv; charset=utf-8", $"survey-{id}.csv"),
+            "xlsx" => File(await _export.GenerateXlsxAsync(id, current, ct),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                $"survey-{id}.xlsx"),
+            "geojson" => File(await _export.GenerateGeoJsonAsync(id, current, ct),
+                "application/geo+json", $"survey-{id}.geojson"),
+            "zip" => File(await _zipBundler.BuildAsync(id, current, ct),
+                "application/zip", $"survey-{id}.zip"),
+            _ => BadRequest(new ProblemDetails
+            {
+                Status = 400,
+                Title = "Bad Request",
+                Detail = $"Formato '{format}' no soportado. Usar csv | xlsx | geojson | zip.",
+            }),
+        };
     }
 
     /// <summary>

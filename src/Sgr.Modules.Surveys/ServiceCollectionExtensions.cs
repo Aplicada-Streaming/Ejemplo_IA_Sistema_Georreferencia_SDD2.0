@@ -12,6 +12,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IListSurveyPointsService, ListSurveyPointsService>();
         services.AddScoped<IGetSurveyService, GetSurveyService>();
         services.AddScoped<ICloseSurveyService, CloseSurveyService>();
+        services.AddScoped<IExportSurveyService, ExportSurveyService>();
+        services.AddScoped<IReportSummaryService, ReportSummaryService>();
         return services;
     }
 }

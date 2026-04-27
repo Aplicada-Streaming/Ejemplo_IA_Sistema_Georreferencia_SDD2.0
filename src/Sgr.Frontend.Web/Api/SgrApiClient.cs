@@ -38,6 +38,10 @@ public interface ISgrApiClient
     /// mapear cada FieldValue (key + JSON) al label/tipo correcto.
     /// </summary>
     Task<TemplateVersionDetailDto> GetSurveyTemplateVersionAsync(Guid surveyId, CancellationToken ct = default);
+
+    // E.6.a — Reportes y exports
+    Task<ReportSummaryDto> GetReportSummaryAsync(CancellationToken ct = default);
+    Task<byte[]> ExportSurveyAsync(Guid surveyId, string format, CancellationToken ct = default);
 }
 
 public sealed class SgrApiClient : ISgrApiClient
@@ -211,6 +215,30 @@ public sealed class SgrApiClient : ISgrApiClient
             ?? throw new InvalidOperationException("Respuesta vacía.");
     }
 
+    public async Task<ReportSummaryDto> GetReportSummaryAsync(CancellationToken ct = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/reports/summary");
+        AttachAuth(request);
+
+        using var response = await _http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+            throw await BuildApiExceptionAsync(response, "No pude cargar el resumen.", ct);
+        return await response.Content.ReadFromJsonAsync<ReportSummaryDto>(cancellationToken: ct)
+            ?? throw new InvalidOperationException("Respuesta vacía.");
+    }
+
+    public async Task<byte[]> ExportSurveyAsync(Guid surveyId, string format, CancellationToken ct = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get,
+            $"/api/v1/surveys/{surveyId}/export?format={Uri.EscapeDataString(format)}");
+        AttachAuth(request);
+
+        using var response = await _http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+            throw await BuildApiExceptionAsync(response, "No pude exportar el relevamiento.", ct);
+        return await response.Content.ReadAsByteArrayAsync(ct);
+    }
+
     public async Task<IReadOnlyList<PointFieldValueDto>> ListPointFieldValuesAsync(Guid pointId, CancellationToken ct = default)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/points/{pointId}/field-values");
@@ -372,3 +400,19 @@ public sealed record PointFieldValueDto(
     string? ValueJson,
     DateTime UpdatedAt,
     Guid UpdatedBy);
+
+// ───────── Reportes (E.6.a) ─────────
+
+public sealed record ReportSummaryDto(
+    int TotalSurveys,
+    int OpenSurveys,
+    int ClosedSurveys,
+    int TotalPoints,
+    int TotalPhotos,
+    IReadOnlyList<RecentSurveyDto> Recent);
+
+public sealed record RecentSurveyDto(
+    Guid Id,
+    string Name,
+    string Status,
+    DateTime UpdatedAt);

@@ -1,51 +1,135 @@
 @page "/"
+@rendermode InteractiveServer
 @attribute [Authorize]
+@inject ISgrApiClient Api
+@inject NavigationManager Nav
 
 <PageTitle>SGR — Dashboard</PageTitle>
 
-<MudText Typo="Typo.h4" Class="mb-4">Dashboard</MudText>
-
 <AuthorizeView>
     <Authorized>
-        <MudGrid>
-            <MudItem xs="12" md="6">
-                <MudCard Elevation="2">
-                    <MudCardContent>
-                        <MudText Typo="Typo.h6" Class="mb-2">Tu sesión</MudText>
-                        <MudText Typo="Typo.body1">
-                            <strong>Usuario:</strong> @context.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
-                        </MudText>
-                        <MudText Typo="Typo.body1">
-                            <strong>Rol:</strong> @context.User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value
-                        </MudText>
-                        @{
-                            var areaId = context.User.FindFirst(SgrClaims.AreaId)?.Value;
-                            if (!string.IsNullOrWhiteSpace(areaId))
-                            {
-                                <MudText Typo="Typo.body1">
-                                    <strong>Área:</strong> <code>@areaId</code>
-                                </MudText>
-                            }
-                        }
-                    </MudCardContent>
-                </MudCard>
-            </MudItem>
+        <MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+            <MudText Typo="Typo.h4">Dashboard</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                @context.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
+            </MudText>
+        </MudStack>
 
-            <MudItem xs="12" md="6">
-                <MudCard Elevation="2">
-                    <MudCardContent>
-                        <MudText Typo="Typo.h6" Class="mb-2">Acciones rápidas</MudText>
-                        <MudButton Variant="Variant.Filled" Color="Color.Primary"
-                                   Href="/surveys/new" StartIcon="@Icons.Material.Filled.Add" Class="me-2 mb-2">
-                            Nuevo relevamiento
-                        </MudButton>
-                        <MudButton Variant="Variant.Outlined" Color="Color.Primary"
-                                   Href="/surveys" StartIcon="@Icons.Material.Filled.List" Class="mb-2">
-                            Ver mis relevamientos
-                        </MudButton>
-                    </MudCardContent>
-                </MudCard>
-            </MudItem>
-        </MudGrid>
+        @if (_loading)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+        }
+        else if (_error is not null)
+        {
+            <MudAlert Severity="Severity.Error">@_error</MudAlert>
+        }
+        else if (_summary is not null)
+        {
+            @* ───── KPI cards ───── *@
+            <MudGrid Spacing="3" Class="mb-4">
+                <MudItem xs="12" sm="6" md="3">
+                    <MudPaper Class="pa-4" Elevation="2">
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Relevamientos</MudText>
+                        <MudText Typo="Typo.h3" Color="Color.Primary">@_summary.TotalSurveys</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            @_summary.OpenSurveys abiertos · @_summary.ClosedSurveys cerrados
+                        </MudText>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudPaper Class="pa-4" Elevation="2">
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Puntos capturados</MudText>
+                        <MudText Typo="Typo.h3" Color="Color.Success">@_summary.TotalPoints</MudText>
+                        <MudIcon Icon="@Icons.Material.Filled.PinDrop" Size="Size.Small" Class="mud-text-secondary" />
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudPaper Class="pa-4" Elevation="2">
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Fotos almacenadas</MudText>
+                        <MudText Typo="Typo.h3" Color="Color.Info">@_summary.TotalPhotos</MudText>
+                        <MudIcon Icon="@Icons.Material.Filled.PhotoLibrary" Size="Size.Small" Class="mud-text-secondary" />
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudPaper Class="pa-4" Elevation="2" Style="background: var(--mud-palette-primary-lighten);">
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Acciones rápidas</MudText>
+                        <MudStack Spacing="1" Class="mt-2">
+                            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary"
+                                       StartIcon="@Icons.Material.Filled.List"
+                                       Href="/surveys" FullWidth="true">
+                                Ver todos
+                            </MudButton>
+                            <AuthorizeView Roles="admin_raiz,jefe_area" Context="qa">
+                                <Authorized>
+                                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                                               StartIcon="@Icons.Material.Filled.Add"
+                                               Href="/surveys/new" FullWidth="true">
+                                        Nuevo
+                                    </MudButton>
+                                </Authorized>
+                            </AuthorizeView>
+                        </MudStack>
+                    </MudPaper>
+                </MudItem>
+            </MudGrid>
+
+            @* ───── Recent surveys ───── *@
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.h6" Class="mb-3">Actividad reciente</MudText>
+
+                @if (_summary.Recent.Count == 0)
+                {
+                    <MudText Class="mud-text-secondary">Aún no hay relevamientos visibles para tu rol.</MudText>
+                }
+                else
+                {
+                    <MudTable Items="_summary.Recent" Hover="true" Dense="true" Bordered="false" Striped="true"
+                              OnRowClick="@((TableRowClickEventArgs<RecentSurveyDto> e) => Open(e.Item!))"
+                              Style="cursor: pointer;">
+                        <HeaderContent>
+                            <MudTh>Nombre</MudTh>
+                            <MudTh>Estado</MudTh>
+                            <MudTh>Última actualización</MudTh>
+                        </HeaderContent>
+                        <RowTemplate Context="row">
+                            <MudTd>@row.Name</MudTd>
+                            <MudTd>
+                                <MudChip T="string" Size="Size.Small" Color="@StatusColor(row.Status)">
+                                    @row.Status
+                                </MudChip>
+                            </MudTd>
+                            <MudTd>@row.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
+            </MudPaper>
+        }
+
+        <MudAlert Severity="Severity.Info" Class="mt-6" Icon="@Icons.Material.Filled.WifiOff">
+            La captura en móvil funciona offline. La sincronización ocurre automáticamente cuando hay red.
+        </MudAlert>
     </Authorized>
 </AuthorizeView>
+
+@code {
+    private bool _loading = true;
+    private string? _error;
+    private ReportSummaryDto? _summary;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { _summary = await Api.GetReportSummaryAsync(); }
+        catch (Exception ex) { _error = $"No pude cargar el resumen: {ex.Message}"; }
+        finally { _loading = false; }
+    }
+
+    private void Open(RecentSurveyDto s) => Nav.NavigateTo($"/surveys/{s.Id}");
+
+    private static Color StatusColor(string status) => status switch
+    {
+        "abierto" => Color.Success,
+        "cerrado" => Color.Default,
+        "eliminado_logico" => Color.Error,
+        _ => Color.Info,
+    };
+}

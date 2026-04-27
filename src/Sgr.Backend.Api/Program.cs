@@ -43,6 +43,9 @@ try
 
     builder.Services.Configure<SeedOptions>(builder.Configuration.GetSection(SeedOptions.SectionName));
 
+    // E.6.a — bundler ZIP (CSV + GeoJSON + fotos). Vive en API porque combina Surveys + Storage.
+    builder.Services.AddScoped<SurveyZipBundler>();
+
     builder.Services.AddControllers()
         .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
     builder.Services.AddProblemDetails();
