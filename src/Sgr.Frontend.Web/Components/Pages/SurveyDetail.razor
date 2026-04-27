@@ -1,0 +1,177 @@
+@page "/surveys/{SurveyId:guid}"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@inject ISgrApiClient Api
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+
+<PageTitle>SGR — Detalle</PageTitle>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+}
+else if (_error is not null)
+{
+    <MudAlert Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+    <MudButton Variant="Variant.Outlined" OnClick="LoadAsync">Reintentar</MudButton>
+}
+else if (_survey is not null)
+{
+    @* ---- Header con metadata ---- *@
+    <MudPaper Class="pa-4 mb-4" Elevation="1">
+        <MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
+            <div style="flex:1; min-width:0;">
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+                    <MudText Typo="Typo.h5">@_survey.Name</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="@StatusColor(_survey.Status)">@_survey.Status</MudChip>
+                </MudStack>
+                @if (!string.IsNullOrWhiteSpace(_survey.Description))
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@_survey.Description</MudText>
+                }
+                <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+                    Creado @_survey.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                    @if (_survey.ClosedAt is not null)
+                    {
+                        <span> · Cerrado @_survey.ClosedAt.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</span>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_survey.Tags))
+                    {
+                        <span> · @_survey.Tags</span>
+                    }
+                </MudText>
+            </div>
+
+            @* Acciones por rol — sólo jefe del área o admin pueden cerrar *@
+            <AuthorizeView Roles="admin_raiz,jefe_area" Context="auth">
+                <Authorized>
+                    @if (_survey.Status == "abierto")
+                    {
+                        <MudButton Variant="Variant.Outlined" Color="Color.Warning"
+                                   StartIcon="@Icons.Material.Filled.Lock"
+                                   OnClick="CloseAsync" Disabled="_busy">
+                            Cerrar relevamiento
+                        </MudButton>
+                    }
+                </Authorized>
+            </AuthorizeView>
+        </MudStack>
+    </MudPaper>
+
+    @* ---- Mapa con marcadores ---- *@
+    @if (_points.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info" Class="mb-3" Icon="@Icons.Material.Filled.MapsHomeWork">
+            Este relevamiento todavía no tiene puntos cargados.
+        </MudAlert>
+    }
+    else
+    {
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">
+            @_points.Count punto@(_points.Count == 1 ? "" : "s") · tap un marcador para ver fotos.
+        </MudText>
+    }
+
+    <LeafletMap Markers="@_markers" Center="@_center" Height="60vh"
+                OnMarkerClicked="OpenPhotosForPointAsync" />
+
+    <MudButton Variant="Variant.Text" Color="Color.Default" Class="mt-3"
+               StartIcon="@Icons.Material.Filled.ArrowBack" Href="/surveys">
+        Volver
+    </MudButton>
+}
+
+@code {
+    [Parameter] public Guid SurveyId { get; set; }
+
+    private bool _loading = true;
+    private bool _busy;
+    private string? _error;
+    private SurveyDto? _survey;
+    private IReadOnlyList<PointDto> _points = Array.Empty<PointDto>();
+    private IReadOnlyList<LeafletMap.MapMarker> _markers = Array.Empty<LeafletMap.MapMarker>();
+    private LeafletMap.MapPoint? _center;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            // Hacemos las dos llamadas en paralelo: detalle + puntos.
+            var detailTask = Api.GetSurveyAsync(SurveyId);
+            var pointsTask = Api.ListPointsAsync(SurveyId);
+            await Task.WhenAll(detailTask, pointsTask);
+
+            _survey = detailTask.Result;
+            _points = pointsTask.Result;
+            _markers = _points.Select(p => new LeafletMap.MapMarker(
+                PointId: p.Id,
+                Latitude: p.Latitude,
+                Longitude: p.Longitude,
+                Title: p.Title ?? $"Punto {p.Id.ToString()[..8]}",
+                Description: p.Description,
+                AccuracyM: p.AccuracyM,
+                CaptureMode: p.CaptureMode,
+                CreatedAt: p.CreatedAt)).ToArray();
+
+            if (_points.Count > 0)
+                _center = new LeafletMap.MapPoint(_points[0].Latitude, _points[0].Longitude);
+        }
+        catch (Exception ex)
+        {
+            _error = $"No pude cargar el detalle: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task CloseAsync()
+    {
+        if (_survey is null || _busy) return;
+
+        var confirm = await Dialogs.ShowMessageBox(
+            "Cerrar relevamiento",
+            $"¿Seguro que querés cerrar '{_survey.Name}'? Una vez cerrado, los relevadores no podrán cargar más puntos.",
+            yesText: "Cerrar", noText: "Cancelar");
+        if (confirm != true) return;
+
+        _busy = true;
+        try
+        {
+            _survey = await Api.CloseSurveyAsync(SurveyId);
+            Snackbar.Add("Relevamiento cerrado.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"No pude cerrar: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private Task OpenPhotosForPointAsync(Guid pointId)
+    {
+        // 4.5: galería de fotos.
+        var parameters = new DialogParameters { ["PointId"] = pointId };
+        return Dialogs.ShowAsync<Sgr.Frontend.Web.Components.Dialogs.PhotoGalleryDialog>(
+            "Fotos del punto", parameters,
+            new DialogOptions { FullWidth = true, MaxWidth = MaxWidth.Medium, CloseButton = true });
+    }
+
+    private static Color StatusColor(string status) => status switch
+    {
+        "abierto" => Color.Success,
+        "cerrado" => Color.Default,
+        "eliminado_logico" => Color.Error,
+        _ => Color.Info,
+    };
+}

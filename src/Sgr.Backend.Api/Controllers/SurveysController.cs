@@ -15,15 +15,21 @@ public sealed class SurveysController : ControllerBase
     private readonly ICreateSurveyService _create;
     private readonly IListSurveysService _list;
     private readonly IListSurveyPointsService _listPoints;
+    private readonly IGetSurveyService _get;
+    private readonly ICloseSurveyService _close;
 
     public SurveysController(
         ICreateSurveyService create,
         IListSurveysService list,
-        IListSurveyPointsService listPoints)
+        IListSurveyPointsService listPoints,
+        IGetSurveyService get,
+        ICloseSurveyService close)
     {
         _create = create;
         _list = list;
         _listPoints = listPoints;
+        _get = get;
+        _close = close;
     }
 
     /// <summary>List surveys visible to the current user.</summary>
@@ -77,6 +83,30 @@ public sealed class SurveysController : ControllerBase
     {
         var current = CurrentUserAccessor.FromPrincipal(User);
         var result = await _listPoints.ListAsync(id, current, ct);
+        return Ok(result);
+    }
+
+    /// <summary>Get survey detail by id, with the same visibility rules as List.</summary>
+    [HttpGet("{id:guid}")]
+    [ProducesResponseType(typeof(SurveyDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<SurveyDto>> Get(Guid id, CancellationToken ct)
+    {
+        var current = CurrentUserAccessor.FromPrincipal(User);
+        var result = await _get.GetByIdAsync(id, current, ct);
+        return Ok(result);
+    }
+
+    /// <summary>Close a survey. Sólo admin o jefe del área. Idempotente.</summary>
+    [HttpPost("{id:guid}/close")]
+    [ProducesResponseType(typeof(SurveyDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<SurveyDto>> Close(Guid id, CancellationToken ct)
+    {
+        var current = CurrentUserAccessor.FromPrincipal(User);
+        var result = await _close.CloseAsync(id, current, ct);
         return Ok(result);
     }
 }

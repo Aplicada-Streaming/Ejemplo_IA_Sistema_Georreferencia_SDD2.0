@@ -1,0 +1,122 @@
+@inject ISgrApiClient Api
+
+<MudDialog>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+        }
+        else if (_error is not null)
+        {
+            <MudAlert Severity="Severity.Error">@_error</MudAlert>
+        }
+        else if (_photos.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Icon="@Icons.Material.Filled.PhotoLibrary">
+                Este punto no tiene fotos cargadas.
+            </MudAlert>
+        }
+        else
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">
+                @_photos.Count foto@(_photos.Count == 1 ? "" : "s") · @FormatBytes(_photos.Sum(p => p.SizeBytes)) total
+            </MudText>
+
+            <MudGrid Spacing="2">
+                @foreach (var (photo, dataUrl) in _photoUrls)
+                {
+                    <MudItem xs="12" sm="6">
+                        <MudPaper Elevation="1" Class="pa-2">
+                            @if (dataUrl is null)
+                            {
+                                <MudStack AlignItems="AlignItems.Center" Class="my-4">
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Cargando foto…</MudText>
+                                </MudStack>
+                            }
+                            else
+                            {
+                                <img src="@dataUrl"
+                                     style="width:100%; max-height:400px; object-fit:contain; border-radius:4px;"
+                                     alt="Foto @photo.Id" />
+                            }
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">
+                                @photo.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ·
+                                @FormatBytes(photo.SizeBytes) ·
+                                @photo.AdapterName ·
+                                <span style="font-family: monospace;" title="@photo.ContentHash">
+                                    @photo.ContentHash[..12]…
+                                </span>
+                            </MudText>
+                            @if (!string.IsNullOrWhiteSpace(photo.Comment))
+                            {
+                                <MudText Typo="Typo.body2" Class="mt-1">@photo.Comment</MudText>
+                            }
+                        </MudPaper>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Cerrar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+    [Parameter] public Guid PointId { get; set; }
+
+    private bool _loading = true;
+    private string? _error;
+    private IReadOnlyList<PhotoSummaryDto> _photos = Array.Empty<PhotoSummaryDto>();
+    private List<(PhotoSummaryDto Photo, string? DataUrl)> _photoUrls = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _photos = await Api.ListPointPhotosAsync(PointId);
+            _photoUrls = _photos.Select(p => ((PhotoSummaryDto, string?))(p, null)).ToList();
+        }
+        catch (Exception ex)
+        {
+            _error = $"No pude listar las fotos: {ex.Message}";
+            _loading = false;
+            return;
+        }
+
+        _loading = false;
+        StateHasChanged();
+
+        // Cargamos los binarios uno a uno y los renderizamos como data: URL.
+        // Para fotos chicas-medianas (típicamente <5MB) esto es suficiente; para
+        // catálogos grandes habría que hacer thumbnails server-side (deuda pendiente).
+        for (int i = 0; i < _photos.Count; i++)
+        {
+            var p = _photos[i];
+            try
+            {
+                using var response = await Api.DownloadPhotoAsync(p.Id);
+                var bytes = await response.Content.ReadAsByteArrayAsync();
+                var mime = response.Content.Headers.ContentType?.MediaType ?? "image/jpeg";
+                var b64 = Convert.ToBase64String(bytes);
+                _photoUrls[i] = (p, $"data:{mime};base64,{b64}");
+                StateHasChanged();
+            }
+            catch
+            {
+                // No bloqueamos la galería entera por una foto rota; queda en estado "cargando".
+            }
+        }
+    }
+
+    private void Close() => Dialog.Close();
+
+    private static string FormatBytes(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
+        return $"{bytes / (1024.0 * 1024.0):F2} MB";
+    }
+}

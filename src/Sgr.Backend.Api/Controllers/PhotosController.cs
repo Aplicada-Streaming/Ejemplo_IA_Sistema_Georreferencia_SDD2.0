@@ -109,6 +109,26 @@ public sealed class PhotosController : ControllerBase
     }
 
     /// <summary>
+    /// Lista las fotos asociadas a un punto, ordenadas por CreatedAt ASC. Devuelve metadata
+    /// solamente; el binario se baja con <see cref="GetContent"/> usando el ID de cada item.
+    /// </summary>
+    [HttpGet("/api/v1/points/{pointId:guid}/photos")]
+    [ProducesResponseType(typeof(IReadOnlyList<PhotoSummaryDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<PhotoSummaryDto>>> ListByPoint(
+        Guid pointId,
+        CancellationToken ct)
+    {
+        var photos = await _db.Photos.AsNoTracking()
+            .Where(p => p.PointId == pointId && !p.IsDeleted)
+            .OrderBy(p => p.CreatedAt)
+            .Select(p => new PhotoSummaryDto(
+                p.Id, p.PointId, p.AdapterName, p.SizeBytes, p.ContentHash,
+                p.Comment, p.CreatedBy, p.Origin, p.CreatedAt))
+            .ToListAsync(ct);
+        return Ok(photos);
+    }
+
+    /// <summary>
     /// Devuelve el binario de la foto. Selecciona el adapter por <c>adapter_name</c> registrado
     /// en la entidad Photo, NO el activo del sistema (RN-12). Esto permite leer fotos viejas
     /// aunque el sistema haya migrado a otro storage.
@@ -150,3 +170,19 @@ public sealed record PhotoCreatedDto(
     string AdapterRef,
     long SizeBytes,
     string ContentHash);
+
+/// <summary>
+/// Resumen de foto para listados. NO incluye <c>AdapterRef</c> (es interno de storage)
+/// ni <c>MetadataJson</c> (puede ser grande). El cliente baja el binario con
+/// <c>GET /api/v1/photos/{id}/content</c>.
+/// </summary>
+public sealed record PhotoSummaryDto(
+    Guid Id,
+    Guid PointId,
+    string AdapterName,
+    long SizeBytes,
+    string ContentHash,
+    string? Comment,
+    Guid CreatedBy,
+    string Origin,
+    DateTime CreatedAt);

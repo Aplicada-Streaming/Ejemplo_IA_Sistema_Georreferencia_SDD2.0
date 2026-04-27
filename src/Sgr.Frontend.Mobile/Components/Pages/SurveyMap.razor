@@ -71,6 +71,7 @@ else
         {
             _points = await Api.ListPointsAsync(SurveyId);
             _markers = _points.Select(p => new LeafletMap.MapMarker(
+                PointId: p.Id,
                 Latitude: p.Latitude,
                 Longitude: p.Longitude,
                 Title: p.Title ?? $"Punto {p.Id.ToString()[..8]}",

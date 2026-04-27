@@ -11,6 +11,20 @@ public interface ISgrApiClient
     Task<LoginResult> LoginAsync(string email, string password, CancellationToken ct = default);
     Task<IReadOnlyList<SurveyDto>> ListSurveysAsync(string? statusFilter = null, CancellationToken ct = default);
     Task<SurveyDto> CreateSurveyAsync(CreateSurveyDto request, CancellationToken ct = default);
+
+    // E.4.2: detalle, puntos, fotos, cierre.
+    Task<SurveyDto> GetSurveyAsync(Guid surveyId, CancellationToken ct = default);
+    Task<IReadOnlyList<PointDto>> ListPointsAsync(Guid surveyId, CancellationToken ct = default);
+    Task<IReadOnlyList<PhotoSummaryDto>> ListPointPhotosAsync(Guid pointId, CancellationToken ct = default);
+    Task<SurveyDto> CloseSurveyAsync(Guid surveyId, CancellationToken ct = default);
+
+    /// <summary>URL absoluta al binario de una foto (incluye host del backend).
+    /// El servidor sirve <c>image/*</c>; el browser maneja el GET con auth header
+    /// vía <c>HttpClient</c>, no se puede usar directamente como <c>src</c> de un img tag.</summary>
+    string GetPhotoContentUrl(Guid photoId);
+
+    /// <summary>Baja el binario de una foto y devuelve el stream para mostrarlo.</summary>
+    Task<HttpResponseMessage> DownloadPhotoAsync(Guid photoId, CancellationToken ct = default);
 }
 
 public sealed class SgrApiClient : ISgrApiClient
@@ -85,6 +99,77 @@ public sealed class SgrApiClient : ISgrApiClient
 
         return await response.Content.ReadFromJsonAsync<SurveyDto>(cancellationToken: ct)
             ?? throw new InvalidOperationException("Respuesta del servidor vacía.");
+    }
+
+    public async Task<SurveyDto> GetSurveyAsync(Guid surveyId, CancellationToken ct = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/surveys/{surveyId}");
+        AttachAuth(request);
+
+        using var response = await _http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+            throw await BuildApiExceptionAsync(response, "No pude obtener el relevamiento.", ct);
+        return await response.Content.ReadFromJsonAsync<SurveyDto>(cancellationToken: ct)
+            ?? throw new InvalidOperationException("Respuesta vacía.");
+    }
+
+    public async Task<IReadOnlyList<PointDto>> ListPointsAsync(Guid surveyId, CancellationToken ct = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/surveys/{surveyId}/points");
+        AttachAuth(request);
+
+        using var response = await _http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+            throw await BuildApiExceptionAsync(response, "No pude listar los puntos.", ct);
+        return await response.Content.ReadFromJsonAsync<IReadOnlyList<PointDto>>(cancellationToken: ct)
+            ?? Array.Empty<PointDto>();
+    }
+
+    public async Task<IReadOnlyList<PhotoSummaryDto>> ListPointPhotosAsync(Guid pointId, CancellationToken ct = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/points/{pointId}/photos");
+        AttachAuth(request);
+
+        using var response = await _http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+            throw await BuildApiExceptionAsync(response, "No pude listar las fotos.", ct);
+        return await response.Content.ReadFromJsonAsync<IReadOnlyList<PhotoSummaryDto>>(cancellationToken: ct)
+            ?? Array.Empty<PhotoSummaryDto>();
+    }
+
+    public async Task<SurveyDto> CloseSurveyAsync(Guid surveyId, CancellationToken ct = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/surveys/{surveyId}/close");
+        AttachAuth(request);
+
+        using var response = await _http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+            throw await BuildApiExceptionAsync(response, "No pude cerrar el relevamiento.", ct);
+        return await response.Content.ReadFromJsonAsync<SurveyDto>(cancellationToken: ct)
+            ?? throw new InvalidOperationException("Respuesta vacía.");
+    }
+
+    public string GetPhotoContentUrl(Guid photoId) =>
+        new Uri(_http.BaseAddress!, $"/api/v1/photos/{photoId}/content").ToString();
+
+    public async Task<HttpResponseMessage> DownloadPhotoAsync(Guid photoId, CancellationToken ct = default)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/photos/{photoId}/content");
+        AttachAuth(request);
+        var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+        if (!response.IsSuccessStatusCode)
+            throw await BuildApiExceptionAsync(response, "No pude bajar la foto.", ct);
+        return response;
+    }
+
+    private async Task<SgrApiException> BuildApiExceptionAsync(HttpResponseMessage response, string defaultMsg, CancellationToken ct)
+    {
+        var problem = await ReadProblemDetailsAsync(response, ct);
+        return new SgrApiException(
+            (int)response.StatusCode,
+            problem?.Title ?? response.ReasonPhrase ?? "Error",
+            problem?.Detail ?? defaultMsg,
+            problem?.ErrorCode);
     }
 
     private void AttachAuth(HttpRequestMessage request)
@@ -163,3 +248,28 @@ public abstract record LoginResult
     public sealed record Forbidden(string Detail) : LoginResult;
     public sealed record Error(string Detail) : LoginResult;
 }
+
+/// <summary>Espejo de Sgr.Modules.Surveys.Application.PointDto.</summary>
+public sealed record PointDto(
+    Guid Id,
+    Guid SurveyId,
+    decimal Latitude,
+    decimal Longitude,
+    decimal? AccuracyM,
+    string? Title,
+    string? Description,
+    string CaptureMode,
+    DateTime CreatedAt,
+    DateTime UpdatedAt);
+
+/// <summary>Espejo de Sgr.Backend.Api.Controllers.PhotoSummaryDto.</summary>
+public sealed record PhotoSummaryDto(
+    Guid Id,
+    Guid PointId,
+    string AdapterName,
+    long SizeBytes,
+    string ContentHash,
+    string? Comment,
+    Guid CreatedBy,
+    string Origin,
+    DateTime CreatedAt);

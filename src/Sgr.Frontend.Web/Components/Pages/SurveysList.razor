@@ -37,7 +37,9 @@ else if (_surveys is null || _surveys.Count == 0)
 }
 else
 {
-    <MudTable Items="_surveys" Hover="true" Dense="true" Bordered="false" Striped="true">
+    <MudTable Items="_surveys" Hover="true" Dense="true" Bordered="false" Striped="true"
+              OnRowClick="@((TableRowClickEventArgs<SurveyDto> e) => Open(e.Item!))"
+              Style="cursor: pointer;">
         <HeaderContent>
             <MudTh>Nombre</MudTh>
             <MudTh>Descripción</MudTh>
@@ -79,6 +81,8 @@ else
             _loading = false;
         }
     }
+
+    private void Open(SurveyDto s) => Nav.NavigateTo($"/surveys/{s.Id}");
 
     private static Color StatusColor(string status) => status switch
     {

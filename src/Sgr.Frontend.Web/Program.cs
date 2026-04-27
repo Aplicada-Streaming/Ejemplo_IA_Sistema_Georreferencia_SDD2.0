@@ -36,12 +36,10 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.SlidingExpiration = false;
     });
 
-builder.Services.AddAuthorization(options =>
-{
-    options.FallbackPolicy = new AuthorizationPolicyBuilder()
-        .RequireAuthenticatedUser()
-        .Build();
-});
+builder.Services.AddAuthorization();
+// Cada página declara su propia [Authorize]/[AllowAnonymous]; no usamos FallbackPolicy
+// global porque interfiere con los endpoints de MapStaticAssets en .NET 10
+// (los `_content/<RCL>/` quedan detrás del login y rompen el CSS).
 
 var app = builder.Build();
 
@@ -50,13 +48,17 @@ if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
 }
 
-app.UseStaticFiles();
+// MapStaticAssets sirve wwwroot + `_content/<RCL>/` (MudBlazor.min.css, etc).
+// Va antes de auth para que CSS/JS estén accesibles también desde la página de login.
+app.MapStaticAssets();
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();
 
 app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode();
+    .AddInteractiveServerRenderMode()
+    .WithStaticAssets();
 
 app.MapAuthEndpoints();
 

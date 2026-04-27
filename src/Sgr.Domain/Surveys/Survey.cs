@@ -50,4 +50,19 @@ public sealed class Survey : Entity
             DeletedAt = null,
         };
     }
+
+    /// <summary>
+    /// Cierra el relevamiento. Operación idempotente: si ya está cerrado no hace nada.
+    /// El cierre fija ClosedAt y bloquea futuras modificaciones (RN-09 — pendiente
+    /// integrar con sync para rechazar eventos PostClose).
+    /// </summary>
+    public void Close(DateTime when)
+    {
+        if (Status == SurveyStatus.Cerrado) return;
+        if (Status == SurveyStatus.EliminadoLogico)
+            throw new InvalidOperationException("No se puede cerrar un relevamiento eliminado.");
+        Status = SurveyStatus.Cerrado;
+        ClosedAt = when;
+        UpdatedAt = when;
+    }
 }

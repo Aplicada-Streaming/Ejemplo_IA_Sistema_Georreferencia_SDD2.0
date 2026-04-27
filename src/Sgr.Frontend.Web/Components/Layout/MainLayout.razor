@@ -17,7 +17,7 @@
                     @context.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
                     @if (context.User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value is { } role)
                     {
-                        <span> · @role</span>
+                        <span> · @RoleLabel(role)</span>
                     }
                 </MudText>
                 <form action="/auth/logout" method="post" style="display:inline;">
@@ -36,9 +36,14 @@
                     <MudNavLink Href="/surveys" Icon="@Icons.Material.Filled.List">
                         Relevamientos
                     </MudNavLink>
-                    <MudNavLink Href="/surveys/new" Icon="@Icons.Material.Filled.Add">
-                        Nuevo relevamiento
-                    </MudNavLink>
+                    @* Sólo admin/jefe pueden crear relevamientos. Los relevadores capturan, no crean. *@
+                    <AuthorizeView Roles="admin_raiz,jefe_area" Context="auth">
+                        <Authorized>
+                            <MudNavLink Href="/surveys/new" Icon="@Icons.Material.Filled.Add">
+                                Nuevo relevamiento
+                            </MudNavLink>
+                        </Authorized>
+                    </AuthorizeView>
                 </MudNavMenu>
             </MudDrawer>
         </Authorized>
@@ -60,4 +65,12 @@
 @code {
     private bool _drawerOpen = true;
     private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
+
+    private static string RoleLabel(string role) => role switch
+    {
+        "admin_raiz" => "Admin",
+        "jefe_area" => "Jefe de área",
+        "relevador" => "Relevador",
+        _ => role,
+    };
 }

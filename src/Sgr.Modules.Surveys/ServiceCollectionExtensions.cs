@@ -10,6 +10,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ICreateSurveyService, CreateSurveyService>();
         services.AddScoped<IListSurveysService, ListSurveysService>();
         services.AddScoped<IListSurveyPointsService, ListSurveyPointsService>();
+        services.AddScoped<IGetSurveyService, GetSurveyService>();
+        services.AddScoped<ICloseSurveyService, CloseSurveyService>();
         return services;
     }
 }
