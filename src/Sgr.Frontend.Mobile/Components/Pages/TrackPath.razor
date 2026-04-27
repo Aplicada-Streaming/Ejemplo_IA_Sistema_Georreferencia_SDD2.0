@@ -4,6 +4,7 @@
 @inject IContinuousGpsTracker Tracker
 @inject IOutboxEnqueueService Enqueue
 @inject IOutboxDrainer Drainer
+@inject ICaptureProfileResolver CaptureProfile
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
 
@@ -13,11 +14,20 @@
 
 <MudPaper Class="pa-4" Elevation="2">
 
-    <MudAlert Severity="Severity.Info" Class="mb-3" Icon="@Icons.Material.Filled.DirectionsCar">
-        Modo móvil (Slice 3.5): cada @Profile.SamplingIntervalSeconds s se pide un GPS y
-        se acepta si la precisión es ≤@Profile.AccuracyThresholdMeters m y está más de
-        @Profile.DiscardRadiusMeters m del último punto aceptado.
-    </MudAlert>
+    @if (Profile is not null)
+    {
+        <MudAlert Severity="Severity.Info" Class="mb-3" Icon="@Icons.Material.Filled.DirectionsCar">
+            Modo móvil: cada @Profile.SamplingIntervalSeconds s se pide un GPS y
+            se acepta si la precisión es ≤@Profile.AccuracyThresholdMeters m y está más de
+            @Profile.DiscardRadiusMeters m del último punto aceptado.
+        </MudAlert>
+    }
+    else
+    {
+        <MudAlert Severity="Severity.Info" Class="mb-3" Icon="@Icons.Material.Filled.HourglassEmpty">
+            Cargando configuración del relevamiento…
+        </MudAlert>
+    }
 
     @if (_isRunning)
     {
@@ -83,6 +93,7 @@
     {
         <MudButton Variant="Variant.Filled" Color="Color.Success" FullWidth="true"
                    StartIcon="@Icons.Material.Filled.PlayArrow"
+                   Disabled="@(Profile is null)"
                    OnClick="StartAsync">
             Iniciar trazado
         </MudButton>
@@ -114,7 +125,8 @@
 @code {
     [Parameter] public Guid SurveyId { get; set; }
 
-    private static readonly CaptureModeProfile Profile = CaptureModeProfiles.Movil;
+    /// <summary>Profile resuelto al iniciar el tracking — sale del template del relevamiento.</summary>
+    private CaptureModeProfile? Profile { get; set; }
 
     private bool _isRunning;
     private int _accepted;
@@ -123,6 +135,12 @@
     private string? _lastError;
 
     private CancellationTokenSource? _cts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Pre-cargamos el profile al entrar a la página, así el header muestra valores correctos.
+        Profile = await CaptureProfile.ResolveAsync(SurveyId, mode: "movil");
+    }
 
     private async Task StartAsync()
     {
@@ -140,6 +158,9 @@
             OnAccepted: HandleAcceptedAsync,
             OnDiscarded: HandleDiscardedAsync,
             OnError: HandleErrorAsync);
+
+        // Re-resolver por si el usuario cambió de red entre Init y Start.
+        Profile ??= await CaptureProfile.ResolveAsync(SurveyId, mode: "movil");
 
         try
         {
@@ -180,7 +201,7 @@
                 latitude: p.Latitude,
                 longitude: p.Longitude,
                 accuracyM: p.AccuracyMeters,
-                captureMode: Profile.Mode,
+                captureMode: Profile?.Mode ?? "movil",
                 timestamp: p.CapturedAtUtc);
 
             _ = Drainer.DrainOnceAsync();

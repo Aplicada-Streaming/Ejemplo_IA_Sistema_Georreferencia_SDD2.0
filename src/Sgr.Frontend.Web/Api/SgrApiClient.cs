@@ -25,6 +25,10 @@ public interface ISgrApiClient
 
     /// <summary>Baja el binario de una foto y devuelve el stream para mostrarlo.</summary>
     Task<HttpResponseMessage> DownloadPhotoAsync(Guid photoId, CancellationToken ct = default);
+
+    // E.5.a — Plantillas
+    Task<IReadOnlyList<TemplateSummaryDto>> ListTemplatesAsync(CancellationToken ct = default);
+    Task<TemplateVersionDetailDto> GetTemplateVersionAsync(Guid versionId, CancellationToken ct = default);
 }
 
 public sealed class SgrApiClient : ISgrApiClient
@@ -162,6 +166,30 @@ public sealed class SgrApiClient : ISgrApiClient
         return response;
     }
 
+    public async Task<IReadOnlyList<TemplateSummaryDto>> ListTemplatesAsync(CancellationToken ct = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/templates");
+        AttachAuth(request);
+
+        using var response = await _http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+            throw await BuildApiExceptionAsync(response, "No pude listar las plantillas.", ct);
+        return await response.Content.ReadFromJsonAsync<IReadOnlyList<TemplateSummaryDto>>(cancellationToken: ct)
+            ?? Array.Empty<TemplateSummaryDto>();
+    }
+
+    public async Task<TemplateVersionDetailDto> GetTemplateVersionAsync(Guid versionId, CancellationToken ct = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/templates/versions/{versionId}");
+        AttachAuth(request);
+
+        using var response = await _http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+            throw await BuildApiExceptionAsync(response, "No pude obtener la versión de la plantilla.", ct);
+        return await response.Content.ReadFromJsonAsync<TemplateVersionDetailDto>(cancellationToken: ct)
+            ?? throw new InvalidOperationException("Respuesta vacía.");
+    }
+
     private async Task<SgrApiException> BuildApiExceptionAsync(HttpResponseMessage response, string defaultMsg, CancellationToken ct)
     {
         var problem = await ReadProblemDetailsAsync(response, ct);
@@ -273,3 +301,33 @@ public sealed record PhotoSummaryDto(
     Guid CreatedBy,
     string Origin,
     DateTime CreatedAt);
+
+// ───────── Plantillas (E.5.a) ─────────
+
+/// <summary>Espejo de Sgr.Modules.Templates.Application.TemplateSummaryDto.</summary>
+public sealed record TemplateSummaryDto(
+    Guid Id,
+    string Name,
+    bool IsRoot,
+    Guid? ParentTemplateId,
+    Guid? LatestPublishedVersionId,
+    int? LatestPublishedVersionNumber,
+    DateTime? LatestPublishedAt,
+    DateTime CreatedAt);
+
+public sealed record TemplateVersionDetailDto(
+    Guid VersionId,
+    Guid TemplateId,
+    string TemplateName,
+    int VersionNumber,
+    string Status,
+    DateTime? PublishedAt,
+    IReadOnlyList<FieldDefinitionDto> Fields,
+    System.Text.Json.JsonElement CaptureParams);
+
+public sealed record FieldDefinitionDto(
+    string Key,
+    string Label,
+    string Type,
+    bool Required,
+    IReadOnlyList<string>? Options);

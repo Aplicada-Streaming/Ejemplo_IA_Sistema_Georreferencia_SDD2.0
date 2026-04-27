@@ -1,0 +1,86 @@
+@page "/templates"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = "admin_raiz,jefe_area")]
+@inject ISgrApiClient Api
+@inject NavigationManager Nav
+
+<PageTitle>SGR — Plantillas</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Plantillas</MudText>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+}
+else if (_error is not null)
+{
+    <MudAlert Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+}
+else if (_templates.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">No hay plantillas cargadas.</MudAlert>
+}
+else
+{
+    <MudAlert Severity="Severity.Info" Class="mb-3" Icon="@Icons.Material.Filled.Info">
+        Read-only por ahora. La creación / edición / publicación de versiones llega en E.5.c.
+    </MudAlert>
+
+    <MudTable Items="_templates" Hover="true" Dense="true" Striped="true"
+              OnRowClick="@((TableRowClickEventArgs<TemplateSummaryDto> e) => OpenVersion(e.Item!))"
+              Style="cursor: pointer;">
+        <HeaderContent>
+            <MudTh>Nombre</MudTh>
+            <MudTh>Tipo</MudTh>
+            <MudTh>Versión publicada</MudTh>
+            <MudTh>Publicada</MudTh>
+            <MudTh>Creada</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.Name</MudTd>
+            <MudTd>
+                @if (context.IsRoot)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary">Raíz</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Size="Size.Small">Hija</MudChip>
+                }
+            </MudTd>
+            <MudTd>
+                @if (context.LatestPublishedVersionNumber is { } v)
+                {
+                    <span>v@v</span>
+                }
+                else
+                {
+                    <span class="mud-text-secondary">— sin publicar —</span>
+                }
+            </MudTd>
+            <MudTd>
+                @(context.LatestPublishedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "—")
+            </MudTd>
+            <MudTd>@context.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    private bool _loading = true;
+    private string? _error;
+    private IReadOnlyList<TemplateSummaryDto> _templates = Array.Empty<TemplateSummaryDto>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { _templates = await Api.ListTemplatesAsync(); }
+        catch (Exception ex) { _error = $"No pude cargar plantillas: {ex.Message}"; }
+        finally { _loading = false; }
+    }
+
+    private void OpenVersion(TemplateSummaryDto t)
+    {
+        if (t.LatestPublishedVersionId is { } vid)
+            Nav.NavigateTo($"/templates/versions/{vid}");
+    }
+}

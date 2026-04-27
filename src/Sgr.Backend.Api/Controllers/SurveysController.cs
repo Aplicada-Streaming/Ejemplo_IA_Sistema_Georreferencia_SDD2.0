@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Sgr.Domain.Audit;
 using Sgr.Modules.Surveys.Application;
+using Sgr.Modules.Templates.Application;
 
 namespace Sgr.Backend.Api.Controllers;
 
@@ -17,19 +18,22 @@ public sealed class SurveysController : ControllerBase
     private readonly IListSurveyPointsService _listPoints;
     private readonly IGetSurveyService _get;
     private readonly ICloseSurveyService _close;
+    private readonly IGetTemplateVersionService _getTemplate;
 
     public SurveysController(
         ICreateSurveyService create,
         IListSurveysService list,
         IListSurveyPointsService listPoints,
         IGetSurveyService get,
-        ICloseSurveyService close)
+        ICloseSurveyService close,
+        IGetTemplateVersionService getTemplate)
     {
         _create = create;
         _list = list;
         _listPoints = listPoints;
         _get = get;
         _close = close;
+        _getTemplate = getTemplate;
     }
 
     /// <summary>List surveys visible to the current user.</summary>
@@ -107,6 +111,26 @@ public sealed class SurveysController : ControllerBase
     {
         var current = CurrentUserAccessor.FromPrincipal(User);
         var result = await _close.CloseAsync(id, current, ct);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Devuelve el detalle de la TemplateVersion asignada al relevamiento.
+    /// El cliente móvil usa este endpoint para configurar la captura
+    /// (timeouts, threshold de precisión, radio de descarte) en lugar de
+    /// hardcoded constants — Slice 5 / E.5.
+    /// </summary>
+    [HttpGet("{id:guid}/template-version")]
+    [ProducesResponseType(typeof(TemplateVersionDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<TemplateVersionDetailDto>> GetTemplateVersion(Guid id, CancellationToken ct)
+    {
+        // Reusamos GetSurveyAsync para ejercitar las reglas de visibilidad por rol
+        // antes de devolver el schema. Si el usuario no ve el survey, tampoco ve la plantilla.
+        var current = CurrentUserAccessor.FromPrincipal(User);
+        await _get.GetByIdAsync(id, current, ct);
+
+        var result = await _getTemplate.GetForSurveyAsync(id, ct);
         return Ok(result);
     }
 }

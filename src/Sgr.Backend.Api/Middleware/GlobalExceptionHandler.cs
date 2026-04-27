@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Sgr.Modules.Identity.Application;
 using Sgr.Modules.Surveys.Application;
+using Sgr.Modules.Templates.Application;
 
 namespace Sgr.Backend.Api.Middleware;
 
@@ -20,6 +21,7 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
         {
             LoginException ex => MapLoginError(ex),
             SurveyException ex => MapSurveyError(ex),
+            TemplateNotFoundException ex => (StatusCodes.Status404NotFound, "Not Found", ex.Message),
             ArgumentException ex => (StatusCodes.Status400BadRequest, "Bad Request", ex.Message),
             InvalidOperationException ex => (StatusCodes.Status409Conflict, "Conflict", ex.Message),
             _ => (StatusCodes.Status500InternalServerError, "Internal Server Error",

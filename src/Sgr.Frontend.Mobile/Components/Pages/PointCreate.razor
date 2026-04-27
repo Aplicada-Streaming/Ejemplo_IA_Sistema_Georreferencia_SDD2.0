@@ -4,6 +4,7 @@
 @inject IOutboxDrainer Drainer
 @inject IDialogService Dialogs
 @inject ICameraCaptureService Camera
+@inject ICaptureProfileResolver CaptureProfile
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
 
@@ -146,12 +147,15 @@
             MaxWidth = MaxWidth.Small,
         };
 
+        // E.5.a: parámetros vienen del template publicado del relevamiento;
+        // si no hay red ni cache, el resolver cae al hardcoded "detenido".
+        var profile = await CaptureProfile.ResolveAsync(SurveyId, mode: "detenido");
         var dialogParams = new DialogParameters
         {
             ["Parameters"] = new GeolocationParams(
-                TimeoutSeconds: 30,
-                AccuracyThresholdMeters: 50.0,
-                AllowContinueWithLowAccuracy: true,
+                TimeoutSeconds: profile.TimeoutSeconds,
+                AccuracyThresholdMeters: profile.AccuracyThresholdMeters,
+                AllowContinueWithLowAccuracy: profile.AllowContinueWithLowAccuracy,
                 AllowManualEntry: false),
         };
 

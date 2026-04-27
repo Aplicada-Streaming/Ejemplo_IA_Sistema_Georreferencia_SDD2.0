@@ -19,6 +19,13 @@ public interface ISgrApiClient
     Task<IReadOnlyList<PointDto>> ListPointsAsync(Guid surveyId, CancellationToken ct = default);
 
     /// <summary>
+    /// E.5.a: trae la versión de plantilla activa para el relevamiento — el cuerpo
+    /// se devuelve crudo (string JSON) porque sólo lo necesitamos para cachear y
+    /// extraer <c>captureParams</c>; los DTOs strongly-typed están del lado server.
+    /// </summary>
+    Task<string> GetSurveyTemplateVersionRawAsync(Guid surveyId, CancellationToken ct = default);
+
+    /// <summary>
     /// US-04: push de un batch de eventos al backend. Idempotente por EventId (RN-06).
     /// El cuerpo se serializa tal cual desde <paramref name="eventsJson"/> para que el outbox
     /// pueda persistir el JSON exacto que se envió y reusarlo en reintentos sin reserialización.
@@ -99,6 +106,25 @@ public sealed class SgrApiClient : ISgrApiClient
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<IReadOnlyList<SurveyDto>>(cancellationToken: ct)
             ?? Array.Empty<SurveyDto>();
+    }
+
+    public async Task<string> GetSurveyTemplateVersionRawAsync(Guid surveyId, CancellationToken ct = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/surveys/{surveyId}/template-version");
+        await AttachAuthAsync(request);
+
+        using var response = await _http.SendAsync(request, ct);
+        await ThrowIfUnauthorizedAsync(response);
+        if (!response.IsSuccessStatusCode)
+        {
+            var problem = await ReadProblemAsync(response, ct);
+            throw new SgrApiException(
+                (int)response.StatusCode,
+                problem?.Title ?? response.ReasonPhrase ?? "Error",
+                problem?.Detail ?? "No pude obtener la plantilla del relevamiento.",
+                problem?.ErrorCode);
+        }
+        return await response.Content.ReadAsStringAsync(ct);
     }
 
     public async Task<IReadOnlyList<PointDto>> ListPointsAsync(Guid surveyId, CancellationToken ct = default)

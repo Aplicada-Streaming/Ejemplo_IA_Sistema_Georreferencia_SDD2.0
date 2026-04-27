@@ -61,6 +61,10 @@ public static class MauiProgram
         // viva en la app; la lógica de Start/Stop la maneja la página de trazado.
         builder.Services.AddSingleton<IContinuousGpsTracker, MauiContinuousGpsTracker>();
 
+        // Resolver de profile desde la plantilla del survey (E.5.a). Scoped porque
+        // depende de ISgrApiClient que también es scoped en BlazorWebView.
+        builder.Services.AddScoped<ICaptureProfileResolver, RemoteCaptureProfileResolver>();
+
         // Cámara + foto (E.3.3, US-06).
         builder.Services.AddSingleton<ICameraCaptureService, MauiCameraCaptureService>();
 

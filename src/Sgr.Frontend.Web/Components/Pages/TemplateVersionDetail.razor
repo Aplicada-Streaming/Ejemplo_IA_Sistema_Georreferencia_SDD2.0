@@ -1,0 +1,157 @@
+@page "/templates/versions/{VersionId:guid}"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = "admin_raiz,jefe_area")]
+@inject ISgrApiClient Api
+
+<PageTitle>SGR — Versión de plantilla</PageTitle>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+}
+else if (_error is not null)
+{
+    <MudAlert Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+    <MudButton Variant="Variant.Outlined" OnClick="LoadAsync">Reintentar</MudButton>
+}
+else if (_version is not null)
+{
+    <MudPaper Class="pa-4 mb-4" Elevation="1">
+        <MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
+            <div>
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+                    <MudText Typo="Typo.h5">@_version.TemplateName</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="@StatusColor(_version.Status)">
+                        v@_version.VersionNumber · @_version.Status
+                    </MudChip>
+                </MudStack>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    @if (_version.PublishedAt is { } pub)
+                    {
+                        <span>Publicada @pub.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</span>
+                    }
+                </MudText>
+            </div>
+        </MudStack>
+    </MudPaper>
+
+    <MudGrid>
+        @* ───── Campos definidos ───── *@
+        <MudItem xs="12" md="7">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.h6" Class="mb-3">Campos del formulario</MudText>
+                @if (_version.Fields.Count == 0)
+                {
+                    <MudText Class="mud-text-secondary">Sin campos definidos.</MudText>
+                }
+                else
+                {
+                    <MudList T="FieldDefinitionDto" Dense="true">
+                        @foreach (var f in _version.Fields)
+                        {
+                            <MudListItem T="FieldDefinitionDto" Icon="@FieldIcon(f.Type)">
+                                <MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                    <div style="flex:1; min-width:0;">
+                                        <MudText Typo="Typo.subtitle1">
+                                            @f.Label
+                                            @if (f.Required)
+                                            {
+                                                <span style="color: var(--mud-palette-error);">*</span>
+                                            }
+                                        </MudText>
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                            <code>@f.Key</code> · @f.Type
+                                            @if (f.Options is { Count: > 0 } opts)
+                                            {
+                                                <span> · opciones: @string.Join(", ", opts)</span>
+                                            }
+                                        </MudText>
+                                    </div>
+                                </MudStack>
+                            </MudListItem>
+                            <MudDivider />
+                        }
+                    </MudList>
+                }
+            </MudPaper>
+        </MudItem>
+
+        @* ───── Parámetros de captura ───── *@
+        <MudItem xs="12" md="5">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.h6" Class="mb-3">Parámetros de captura</MudText>
+                <MudSimpleTable Dense="true" Bordered="false" Striped="true" Hover="false">
+                    <tbody>
+                        @foreach (var prop in IterateCaptureParams(_version.CaptureParams))
+                        {
+                            <tr>
+                                <td style="font-family: monospace; color: var(--mud-palette-text-secondary);">
+                                    @prop.Key
+                                </td>
+                                <td><strong>@prop.Value</strong></td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudButton Variant="Variant.Text" Color="Color.Default" Class="mt-4"
+               StartIcon="@Icons.Material.Filled.ArrowBack" Href="/templates">
+        Volver
+    </MudButton>
+}
+
+@code {
+    [Parameter] public Guid VersionId { get; set; }
+
+    private bool _loading = true;
+    private string? _error;
+    private TemplateVersionDetailDto? _version;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try { _version = await Api.GetTemplateVersionAsync(VersionId); }
+        catch (Exception ex) { _error = $"No pude cargar la versión: {ex.Message}"; }
+        finally { _loading = false; }
+    }
+
+    private static Color StatusColor(string status) => status switch
+    {
+        "publicada" => Color.Success,
+        "borrador" => Color.Warning,
+        _ => Color.Default,
+    };
+
+    private static string FieldIcon(string type) => type switch
+    {
+        "fecha" => Icons.Material.Filled.CalendarToday,
+        "selección" => Icons.Material.Filled.List,
+        "texto" => Icons.Material.Filled.TextFields,
+        "numero" => Icons.Material.Filled.Numbers,
+        "booleano" => Icons.Material.Filled.ToggleOn,
+        _ => Icons.Material.Filled.Help,
+    };
+
+    /// <summary>Itera el JsonElement de capture params como pares (clave→valor) para mostrar.</summary>
+    private static IEnumerable<KeyValuePair<string, string>> IterateCaptureParams(System.Text.Json.JsonElement el)
+    {
+        if (el.ValueKind != System.Text.Json.JsonValueKind.Object) yield break;
+        foreach (var prop in el.EnumerateObject())
+        {
+            var v = prop.Value.ValueKind switch
+            {
+                System.Text.Json.JsonValueKind.True => "sí",
+                System.Text.Json.JsonValueKind.False => "no",
+                System.Text.Json.JsonValueKind.Null => "—",
+                _ => prop.Value.ToString(),
+            };
+            yield return new KeyValuePair<string, string>(prop.Name, v);
+        }
+    }
+}

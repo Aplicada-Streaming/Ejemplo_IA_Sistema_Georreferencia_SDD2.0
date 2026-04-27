@@ -8,6 +8,8 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddSgrTemplates(this IServiceCollection services)
     {
         services.AddScoped<ITemplateVersionQuery, TemplateVersionQuery>();
+        services.AddScoped<IListTemplatesService, ListTemplatesService>();
+        services.AddScoped<IGetTemplateVersionService, GetTemplateVersionService>();
         return services;
     }
 }
