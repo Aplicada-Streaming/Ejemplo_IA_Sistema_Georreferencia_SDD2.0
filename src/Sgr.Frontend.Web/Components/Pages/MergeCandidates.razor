@@ -1,0 +1,178 @@
+@page "/surveys/{SurveyId:guid}/merge-candidates"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = "admin_raiz,jefe_area")]
+@inject ISgrApiClient Api
+@inject ISnackbar Snackbar
+
+<PageTitle>SGR — Candidatos a fusión</PageTitle>
+
+<MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudText Typo="Typo.h4">Candidatos a fusión</MudText>
+    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.ArrowBack"
+               Href="@($"/surveys/{SurveyId}")">
+        Volver al relevamiento
+    </MudButton>
+</MudStack>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+}
+else
+{
+    <MudTabs Elevation="1" Rounded="true" PanelClass="pa-4" @bind-ActivePanelIndex="_activeTab">
+        <MudTabPanel Text="@($"Pendientes ({_pending.Count})")" />
+        <MudTabPanel Text="@($"Resueltos ({_resolved.Count})")" />
+    </MudTabs>
+
+    <div class="mt-3">
+        @if (CurrentList().Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Icon="@Icons.Material.Filled.CheckCircle">
+                No hay candidatos en esta categoría.
+            </MudAlert>
+        }
+        else
+        {
+            @foreach (var c in CurrentList())
+            {
+                <MudPaper Class="pa-4 mb-3" Elevation="1">
+                    <MudStack Spacing="2">
+                        <MudText Typo="Typo.subtitle1">
+                            <strong>Distancia:</strong> @c.DistanceMeters m
+                            · <strong>Detectado:</strong> @c.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                        </MudText>
+
+                        <MudGrid Spacing="2">
+                            <MudItem xs="12" md="6">
+                                <MudPaper Class="pa-3" Elevation="0" Style="background:#e3f2fd;">
+                                    <MudText Typo="Typo.caption">Punto A</MudText>
+                                    <MudText Typo="Typo.body2">
+                                        Id: <code>@c.PointAId.ToString()[..8]</code><br />
+                                        Creado por: @c.PointACreatedBy.ToString()[..8]<br />
+                                        @c.PointACreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                                    </MudText>
+                                </MudPaper>
+                            </MudItem>
+                            <MudItem xs="12" md="6">
+                                <MudPaper Class="pa-3" Elevation="0" Style="background:#fff3e0;">
+                                    <MudText Typo="Typo.caption">Punto B</MudText>
+                                    <MudText Typo="Typo.body2">
+                                        Id: <code>@c.PointBId.ToString()[..8]</code><br />
+                                        Creado por: @c.PointBCreatedBy.ToString()[..8]<br />
+                                        @c.PointBCreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                                    </MudText>
+                                </MudPaper>
+                            </MudItem>
+                        </MudGrid>
+
+                        @if (c.Status == "pendiente")
+                        {
+                            <MudStack Row Spacing="2" Wrap="Wrap.Wrap">
+                                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                                           StartIcon="@Icons.Material.Filled.MergeType"
+                                           OnClick="@(() => MergeAsync(c, "centroid"))" Disabled="@_busy">
+                                    Fusionar (centroide)
+                                </MudButton>
+                                <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                                           OnClick="@(() => MergeAsync(c, "keep_a"))" Disabled="@_busy">
+                                    Fusionar (queda A)
+                                </MudButton>
+                                <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                                           OnClick="@(() => MergeAsync(c, "keep_b"))" Disabled="@_busy">
+                                    Fusionar (queda B)
+                                </MudButton>
+                                <MudButton Variant="Variant.Outlined" Color="Color.Default"
+                                           StartIcon="@Icons.Material.Filled.CallSplit"
+                                           OnClick="@(() => KeepSeparateAsync(c))" Disabled="@_busy">
+                                    Mantener separados
+                                </MudButton>
+                            </MudStack>
+                        }
+                        else
+                        {
+                            <MudAlert Severity="Severity.Success" Dense="true">
+                                @StatusLabel(c.Status)
+                                @if (c.ResolutionStrategy is not null)
+                                {
+                                    <span> · estrategia: @c.ResolutionStrategy</span>
+                                }
+                                @if (c.ResolvedAtUtc is not null)
+                                {
+                                    <span> · @c.ResolvedAtUtc.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</span>
+                                }
+                                @if (c.ResultPointId is not null)
+                                {
+                                    <div><small>Punto resultante: <code>@c.ResultPointId.Value.ToString()[..8]</code></small></div>
+                                }
+                            </MudAlert>
+                        }
+                    </MudStack>
+                </MudPaper>
+            }
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public Guid SurveyId { get; set; }
+
+    private bool _loading = true;
+    private bool _busy;
+    private int _activeTab;
+    private List<MergeCandidateDto> _pending = new();
+    private List<MergeCandidateDto> _resolved = new();
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        try
+        {
+            _pending = (await Api.ListMergeCandidatesAsync(SurveyId)).ToList();
+            var all = await Api.ListMergeCandidatesAsync(SurveyId, status: "all");
+            _resolved = all.Where(c => c.Status != "pendiente").ToList();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"No pude cargar candidatos: {ex.Message}", Severity.Error);
+        }
+        finally { _loading = false; }
+    }
+
+    private List<MergeCandidateDto> CurrentList() => _activeTab == 0 ? _pending : _resolved;
+
+    private async Task MergeAsync(MergeCandidateDto c, string strategy)
+    {
+        _busy = true;
+        try
+        {
+            await Api.MergeCandidateAsync(c.Id, strategy);
+            Snackbar.Add($"Fusionado ({strategy}).", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex) { Snackbar.Add($"No pude fusionar: {ex.Message}", Severity.Error); }
+        finally { _busy = false; }
+    }
+
+    private async Task KeepSeparateAsync(MergeCandidateDto c)
+    {
+        _busy = true;
+        try
+        {
+            await Api.KeepCandidatesSeparateAsync(c.Id);
+            Snackbar.Add("Marcados como separados.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex) { Snackbar.Add($"No pude marcarlos: {ex.Message}", Severity.Error); }
+        finally { _busy = false; }
+    }
+
+    private static string StatusLabel(string status) => status switch
+    {
+        "fusionado" => "Resuelto — fusionado",
+        "mantenido_separado" => "Resuelto — mantenidos separados",
+        _ => status,
+    };
+}

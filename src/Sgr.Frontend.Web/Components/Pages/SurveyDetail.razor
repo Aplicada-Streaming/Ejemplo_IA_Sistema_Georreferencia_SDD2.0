@@ -64,9 +64,14 @@ else if (_survey is not null)
                 <AuthorizeView Roles="admin_raiz,jefe_area" Context="confs">
                     <Authorized>
                         <MudButton Variant="Variant.Outlined" Color="Color.Error"
-                                   StartIcon="@Icons.Material.Filled.MergeType"
+                                   StartIcon="@Icons.Material.Filled.SyncProblem"
                                    Href="@($"/surveys/{SurveyId}/conflicts")">
                             Conflictos
+                        </MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Tertiary"
+                                   StartIcon="@Icons.Material.Filled.MergeType"
+                                   Href="@($"/surveys/{SurveyId}/merge-candidates")">
+                            Candidatos fusión
                         </MudButton>
                     </Authorized>
                 </AuthorizeView>

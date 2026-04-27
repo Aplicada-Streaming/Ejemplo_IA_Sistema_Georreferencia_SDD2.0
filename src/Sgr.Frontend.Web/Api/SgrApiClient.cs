@@ -54,6 +54,12 @@ public interface ISgrApiClient
         Guid? surveyId = null, string? type = null, string? status = null, CancellationToken ct = default);
     Task<ConflictDto> ResolveConflictAsync(Guid conflictId, string action, CancellationToken ct = default);
 
+    // Slice 10 / US-21 + US-22 — merge candidates
+    Task<IReadOnlyList<MergeCandidateDto>> ListMergeCandidatesAsync(
+        Guid? surveyId = null, string? status = null, CancellationToken ct = default);
+    Task<MergeCandidateDto> KeepCandidatesSeparateAsync(Guid candidateId, CancellationToken ct = default);
+    Task<MergeCandidateDto> MergeCandidateAsync(Guid candidateId, string strategy, CancellationToken ct = default);
+
     // Slice 8 / US-17 — config de storage activa (admin only)
     Task<StorageConfigDto?> GetStorageConfigAsync(CancellationToken ct = default);
     Task<StorageConfigDto> SaveStorageConfigAsync(StorageConfigDto config, CancellationToken ct = default);
@@ -332,6 +338,52 @@ public sealed class SgrApiClient : ISgrApiClient
             throw await BuildApiExceptionAsync(response, "No pude listar los valores del punto.", ct);
         return await response.Content.ReadFromJsonAsync<IReadOnlyList<PointFieldValueDto>>(cancellationToken: ct)
             ?? Array.Empty<PointFieldValueDto>();
+    }
+
+    // ───────── Slice 10 / US-21 + US-22 — merge candidates ─────────
+
+    public async Task<IReadOnlyList<MergeCandidateDto>> ListMergeCandidatesAsync(
+        Guid? surveyId = null, string? status = null, CancellationToken ct = default)
+    {
+        var qs = new List<string>();
+        if (surveyId is not null) qs.Add($"surveyId={surveyId}");
+        if (!string.IsNullOrWhiteSpace(status)) qs.Add($"status={Uri.EscapeDataString(status)}");
+        var url = "/api/v1/merge-candidates" + (qs.Count > 0 ? "?" + string.Join('&', qs) : "");
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        AttachAuth(request);
+        using var response = await _http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+            throw await BuildApiExceptionAsync(response, "No pude listar candidatos.", ct);
+        return await response.Content.ReadFromJsonAsync<IReadOnlyList<MergeCandidateDto>>(cancellationToken: ct)
+            ?? Array.Empty<MergeCandidateDto>();
+    }
+
+    public async Task<MergeCandidateDto> KeepCandidatesSeparateAsync(Guid candidateId, CancellationToken ct = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post,
+            $"/api/v1/merge-candidates/{candidateId}/keep-separate");
+        AttachAuth(request);
+        using var response = await _http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+            throw await BuildApiExceptionAsync(response, "No pude marcar como separados.", ct);
+        return await response.Content.ReadFromJsonAsync<MergeCandidateDto>(cancellationToken: ct)
+            ?? throw new InvalidOperationException("Respuesta vacía.");
+    }
+
+    public async Task<MergeCandidateDto> MergeCandidateAsync(Guid candidateId, string strategy, CancellationToken ct = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post,
+            $"/api/v1/merge-candidates/{candidateId}/merge")
+        {
+            Content = JsonContent.Create(new { Strategy = strategy }),
+        };
+        AttachAuth(request);
+        using var response = await _http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+            throw await BuildApiExceptionAsync(response, "No pude fusionar.", ct);
+        return await response.Content.ReadFromJsonAsync<MergeCandidateDto>(cancellationToken: ct)
+            ?? throw new InvalidOperationException("Respuesta vacía.");
     }
 
     // ───────── Slice 9 / US-19 + US-20 — conflictos ─────────
@@ -746,6 +798,25 @@ public sealed record GeoResolveResultDto(
     Guid PhotoId,
     Guid PointId,
     bool PointWasCreated);
+
+// ───────── Slice 10 / US-21 + US-22 — merge candidates ─────────
+
+public sealed record MergeCandidateDto(
+    Guid Id,
+    Guid SurveyId,
+    Guid PointAId,
+    Guid PointBId,
+    Guid PointACreatedBy,
+    Guid PointBCreatedBy,
+    DateTime PointACreatedAt,
+    DateTime PointBCreatedAt,
+    decimal DistanceMeters,
+    string Status,
+    DateTime? ResolvedAtUtc,
+    Guid? ResolvedBy,
+    Guid? ResultPointId,
+    string? ResolutionStrategy,
+    DateTime CreatedAt);
 
 // ───────── Slice 9 / US-19 + US-20 — conflictos ─────────
 

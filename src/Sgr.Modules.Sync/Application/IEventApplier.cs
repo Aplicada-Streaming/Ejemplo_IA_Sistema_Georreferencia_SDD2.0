@@ -26,11 +26,13 @@ public sealed class EventApplier : IEventApplier
 {
     private readonly SgrDbContext _db;
     private readonly IDateTimeProvider _clock;
+    private readonly IMergeCandidateDetector _mergeDetector;
 
-    public EventApplier(SgrDbContext db, IDateTimeProvider clock)
+    public EventApplier(SgrDbContext db, IDateTimeProvider clock, IMergeCandidateDetector mergeDetector)
     {
         _db = db;
         _clock = clock;
+        _mergeDetector = mergeDetector;
     }
 
     public async Task<SyncPushResponse> ApplyAsync(IEnumerable<SyncEventDto> events, CancellationToken ct = default)
@@ -168,6 +170,8 @@ public sealed class EventApplier : IEventApplier
 
         _db.Points.Add(point);
         await RecordAuditAsync(e, ct);
+        // US-21 / RN-09: detectar candidatos a fusión con otros puntos cercanos del survey.
+        await _mergeDetector.DetectFromAsync(point, ct);
         return new SyncEventResult(e.EventId, SyncOutcome.Applied, "Point created");
     }
 

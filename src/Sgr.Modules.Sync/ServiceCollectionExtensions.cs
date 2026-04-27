@@ -11,6 +11,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IPullDiffService, PullDiffService>();
         services.AddScoped<IPointAccessChecker, PointAccessChecker>();
         services.AddScoped<IConflictsService, ConflictsService>();
+        services.AddScoped<IMergeCandidateDetector, MergeCandidateDetector>();
+        services.AddScoped<IMergeCandidatesService, MergeCandidatesService>();
         return services;
     }
 }

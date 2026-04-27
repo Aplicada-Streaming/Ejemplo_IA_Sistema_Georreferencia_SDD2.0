@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Sgr.Domain.Audit;
 using Sgr.Domain.Conflicts;
 using Sgr.Domain.Identity;
+using Sgr.Domain.MergeCandidates;
 using Sgr.Domain.Photos;
 using Sgr.Domain.Points;
 using Sgr.Domain.Surveys;
@@ -23,6 +24,7 @@ public class SgrDbContext : DbContext
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
     public DbSet<SystemConfigEntry> SystemConfig => Set<SystemConfigEntry>();
     public DbSet<Conflict> Conflicts => Set<Conflict>();
+    public DbSet<MergeCandidate> MergeCandidates => Set<MergeCandidate>();
 
     public SgrDbContext(DbContextOptions<SgrDbContext> options) : base(options) { }
 
