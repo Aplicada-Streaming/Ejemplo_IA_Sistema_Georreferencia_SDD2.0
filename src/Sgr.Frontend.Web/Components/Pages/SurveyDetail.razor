@@ -69,8 +69,11 @@ else if (_survey is not null)
     }
     else
     {
+        <MudAlert Severity="Severity.Info" Class="mb-2" Dense="true" Icon="@Icons.Material.Filled.TouchApp">
+            <strong>Click sobre el marcador azul</strong> para ver los datos del formulario y las fotos del punto.
+        </MudAlert>
         <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">
-            @_points.Count punto@(_points.Count == 1 ? "" : "s") · tap un marcador para ver fotos.
+            @_points.Count punto@(_points.Count == 1 ? "" : "s") cargado@(_points.Count == 1 ? "" : "s").
         </MudText>
     }
 
@@ -160,10 +163,14 @@ else if (_survey is not null)
 
     private Task OpenPhotosForPointAsync(Guid pointId)
     {
-        // 4.5: galería de fotos.
-        var parameters = new DialogParameters { ["PointId"] = pointId };
+        // 4.5 + 5.b: detalle del punto = field values + galería de fotos.
+        var parameters = new DialogParameters
+        {
+            ["PointId"] = pointId,
+            ["SurveyId"] = (Guid?)SurveyId,
+        };
         return Dialogs.ShowAsync<Sgr.Frontend.Web.Components.Dialogs.PhotoGalleryDialog>(
-            "Fotos del punto", parameters,
+            "Detalle del punto", parameters,
             new DialogOptions { FullWidth = true, MaxWidth = MaxWidth.Medium, CloseButton = true });
     }
 

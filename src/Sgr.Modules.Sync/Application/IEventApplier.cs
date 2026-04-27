@@ -211,7 +211,7 @@ public sealed class EventApplier : IEventApplier
                     $"Owner already has a newer edit (last: {lastOwnerEdit.TimestampOriginal:O})");
             }
 
-            ApplyFieldChangeToPoint(point, e);
+            await ApplyFieldChangeAsync(point, e, ct);
             await RecordAuditAsync(e, ct);
             return new SyncEventResult(e.EventId, SyncOutcome.Applied,
                 ownerEverWroteThisField ? "Owner update" : "Owner overrides any prior collab edits (RN-07)");
@@ -232,7 +232,7 @@ public sealed class EventApplier : IEventApplier
                 $"Older timestamp than current value (last: {lastCollabEdit.TimestampOriginal:O})");
         }
 
-        ApplyFieldChangeToPoint(point, e);
+        await ApplyFieldChangeAsync(point, e, ct);
         await RecordAuditAsync(e, ct);
         return new SyncEventResult(e.EventId, SyncOutcome.Applied, "Field updated by collaborator");
     }
@@ -261,7 +261,7 @@ public sealed class EventApplier : IEventApplier
         return new SyncEventResult(e.EventId, SyncOutcome.Applied, "Point restored");
     }
 
-    private static void ApplyFieldChangeToPoint(Point point, SyncEventDto e)
+    private async Task ApplyFieldChangeAsync(Point point, SyncEventDto e, CancellationToken ct)
     {
         if (e.Field is "title" or "description")
         {
@@ -276,7 +276,25 @@ public sealed class EventApplier : IEventApplier
         }
         else
         {
-            throw new InvalidOperationException($"Field '{e.Field}' is not supported on Point");
+            // E.5.b — Campo de plantilla custom (fecha_inspeccion, condicion_general, etc).
+            // Se almacena en PointFieldValues. Upsert: una sola fila por (PointId, FieldKey).
+            // El value se guarda como JSON crudo; el cliente sabe el tipo via la plantilla.
+            var existing = await _db.PointFieldValues
+                .FirstOrDefaultAsync(v => v.PointId == point.Id && v.FieldKey == e.Field!, ct);
+            if (existing is null)
+            {
+                _db.PointFieldValues.Add(PointFieldValue.Create(
+                    id: Guid.NewGuid(),
+                    pointId: point.Id,
+                    fieldKey: e.Field!,
+                    valueJson: e.NewValueJson,
+                    updatedBy: e.AuthorId,
+                    updatedAt: e.TimestampOriginal));
+            }
+            else
+            {
+                existing.UpdateValue(e.NewValueJson, e.AuthorId, e.TimestampOriginal);
+            }
         }
     }
 

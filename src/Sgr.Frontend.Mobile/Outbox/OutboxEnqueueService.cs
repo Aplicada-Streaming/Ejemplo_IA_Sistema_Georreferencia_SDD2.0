@@ -13,6 +13,11 @@ public interface IOutboxEnqueueService
     /// <summary>
     /// Crea un evento <c>point.created</c> y lo persiste en el outbox local.
     /// La operación es atómica: o se persiste localmente o falla la llamada.
+    ///
+    /// E.5.b: si <paramref name="fieldValues"/> trae entradas, además del
+    /// <c>point.created</c> se emite un <c>point.field_updated</c> por cada
+    /// campo, todos en la MISMA <c>PendingOperation</c> (un único push al
+    /// backend). El backend los aplica en orden.
     /// </summary>
     Task<string> EnqueuePointCreatedAsync(
         Guid surveyId,
@@ -21,7 +26,8 @@ public interface IOutboxEnqueueService
         decimal longitude,
         decimal? accuracyM,
         string captureMode,
-        DateTime timestamp);
+        DateTime timestamp,
+        IReadOnlyDictionary<string, string?>? fieldValues = null);
 
     /// <summary>
     /// E.3.3: encola la subida de una foto capturada. La foto física tiene que estar
@@ -64,32 +70,59 @@ public sealed class OutboxEnqueueService : IOutboxEnqueueService
         decimal longitude,
         decimal? accuracyM,
         string captureMode,
-        DateTime timestamp)
+        DateTime timestamp,
+        IReadOnlyDictionary<string, string?>? fieldValues = null)
     {
         var session = await _tokens.GetAsync()
             ?? throw new InvalidOperationException("Sesión no disponible para encolar eventos.");
 
-        var ev = new SyncEventDto(
-            EventId: Guid.NewGuid(),
-            EntityType: "point",
-            EntityId: pointId,
-            EventType: "created",
-            Field: null,
-            OldValueJson: null,
-            NewValueJson: JsonSerializer.Serialize(new
-            {
-                surveyId,
-                latitude,
-                longitude,
-                accuracyM,
-                captureMode,
-            }, JsonOptions),
-            AuthorId: session.UserId,
-            Origin: "mobile_capture",
-            DeviceId: _device.GetDeviceId(),
-            TimestampOriginal: timestamp);
+        var deviceId = _device.GetDeviceId();
+        var events = new List<SyncEventDto>
+        {
+            new SyncEventDto(
+                EventId: Guid.NewGuid(),
+                EntityType: "point",
+                EntityId: pointId,
+                EventType: "created",
+                Field: null,
+                OldValueJson: null,
+                NewValueJson: JsonSerializer.Serialize(new
+                {
+                    surveyId,
+                    latitude,
+                    longitude,
+                    accuracyM,
+                    captureMode,
+                }, JsonOptions),
+                AuthorId: session.UserId,
+                Origin: "mobile_capture",
+                DeviceId: deviceId,
+                TimestampOriginal: timestamp),
+        };
 
-        var eventsJson = JsonSerializer.Serialize(new[] { ev }, JsonOptions);
+        if (fieldValues is not null)
+        {
+            // Cada par key→value se convierte en un point.field_updated; el value se
+            // serializa como JSON crudo para preservar el tipo (string, number, bool, …).
+            foreach (var (fieldKey, valueJson) in fieldValues)
+            {
+                if (string.IsNullOrWhiteSpace(fieldKey)) continue;
+                events.Add(new SyncEventDto(
+                    EventId: Guid.NewGuid(),
+                    EntityType: "point",
+                    EntityId: pointId,
+                    EventType: "field_updated",
+                    Field: fieldKey,
+                    OldValueJson: null,
+                    NewValueJson: valueJson,
+                    AuthorId: session.UserId,
+                    Origin: "mobile_capture",
+                    DeviceId: deviceId,
+                    TimestampOriginal: timestamp));
+            }
+        }
+
+        var eventsJson = JsonSerializer.Serialize(events, JsonOptions);
         return await _store.EnqueueAsync(surveyId.ToString(), eventsJson, DateTime.UtcNow);
     }
 

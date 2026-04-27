@@ -4,40 +4,15 @@
 
 const instances = new Map();
 
-// Marker pin con CSS puro: evita la dependencia de PNGs (que en WebView de MAUI
-// no resuelven bien con paths relativos). Es un círculo con cola triangular,
-// estilado vía clase `.sgr-pin` inyectada al body.
-let stylesInjected = false;
-function ensureStyles() {
-    if (stylesInjected) return;
-    stylesInjected = true;
-    const css = `
-        .sgr-pin {
-            width: 22px; height: 22px; border-radius: 50% 50% 50% 0;
-            background: #1976d2; border: 2px solid white;
-            transform: rotate(-45deg);
-            box-shadow: 0 1px 3px rgba(0,0,0,0.4);
-        }
-        .sgr-pin::after {
-            content: ""; position: absolute; top: 4px; left: 4px;
-            width: 10px; height: 10px; border-radius: 50%;
-            background: white; transform: rotate(45deg);
-        }`;
-    const style = document.createElement('style');
-    style.textContent = css;
-    document.head.appendChild(style);
-}
-
-function makePinIcon() {
-    ensureStyles();
-    return L.divIcon({
-        className: '',
-        html: '<div class="sgr-pin"></div>',
-        iconSize: [22, 22],
-        iconAnchor: [11, 22],     // base de la cola del pin
-        popupAnchor: [0, -22],
-    });
-}
+// Sin íconos custom: usamos L.circleMarker (SVG puro de Leaflet) que renderiza
+// igual en WebView móvil y Blazor Server, sin depender de divIcon/CSS/PNGs.
+const MARKER_STYLE = {
+    radius: 8,
+    color: '#1976d2',
+    weight: 2,
+    fillColor: '#1976d2',
+    fillOpacity: 0.85,
+};
 
 export function init(elementId, opts) {
     if (instances.has(elementId)) {
@@ -76,6 +51,13 @@ export function setMarkers(elementId, markers, dotNetRef) {
     if (!inst) return;
     const { map } = inst;
 
+    console.log('[sgr-map] setMarkers called', {
+        elementId,
+        count: markers?.length ?? 0,
+        hasDotNetRef: !!dotNetRef,
+        firstPointId: markers?.[0]?.pointId,
+    });
+
     // Limpiar marcadores previos.
     for (const m of inst.markers) m.remove();
     inst.markers = [];
@@ -87,7 +69,7 @@ export function setMarkers(elementId, markers, dotNetRef) {
         const lat = Number(m.lat);
         const lng = Number(m.lng);
         if (Number.isNaN(lat) || Number.isNaN(lng)) continue;
-        const marker = L.marker([lat, lng], { icon: makePinIcon() }).addTo(map);
+        const marker = L.circleMarker([lat, lng], MARKER_STYLE).addTo(map);
 
         const title = m.title ?? 'Punto';
         const sub = [
@@ -100,10 +82,19 @@ export function setMarkers(elementId, markers, dotNetRef) {
         marker.bindPopup(html);
 
         if (dotNetRef && m.pointId) {
+            // Capturamos el pointId en una const local para que el closure lo retenga
+            // correctamente en lugar de mirar el `m` del último iteración.
+            const pointId = m.pointId;
             marker.on('click', () => {
-                // Best-effort: si Blazor falló (page navegada), simplemente loggea.
-                dotNetRef.invokeMethodAsync('OnMarkerClickedAsync', m.pointId)
-                    .catch(err => console.warn('OnMarkerClickedAsync failed', err));
+                console.log('[sgr-map] marker clicked, invoking Blazor', pointId);
+                dotNetRef.invokeMethodAsync('OnMarkerClickedAsync', pointId)
+                    .then(() => console.log('[sgr-map] Blazor returned OK', pointId))
+                    .catch(err => console.error('[sgr-map] Blazor invoke failed', err));
+            });
+        } else {
+            console.warn('[sgr-map] click handler NOT wired', {
+                hasDotNetRef: !!dotNetRef,
+                pointId: m.pointId,
             });
         }
 

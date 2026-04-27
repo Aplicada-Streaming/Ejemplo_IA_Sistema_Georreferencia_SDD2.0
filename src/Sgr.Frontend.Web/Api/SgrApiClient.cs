@@ -29,6 +29,15 @@ public interface ISgrApiClient
     // E.5.a — Plantillas
     Task<IReadOnlyList<TemplateSummaryDto>> ListTemplatesAsync(CancellationToken ct = default);
     Task<TemplateVersionDetailDto> GetTemplateVersionAsync(Guid versionId, CancellationToken ct = default);
+
+    // E.5.b — Field values del punto
+    Task<IReadOnlyList<PointFieldValueDto>> ListPointFieldValuesAsync(Guid pointId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Devuelve la VersiónDePlantilla activa de un relevamiento. El web la usa para
+    /// mapear cada FieldValue (key + JSON) al label/tipo correcto.
+    /// </summary>
+    Task<TemplateVersionDetailDto> GetSurveyTemplateVersionAsync(Guid surveyId, CancellationToken ct = default);
 }
 
 public sealed class SgrApiClient : ISgrApiClient
@@ -190,6 +199,30 @@ public sealed class SgrApiClient : ISgrApiClient
             ?? throw new InvalidOperationException("Respuesta vacía.");
     }
 
+    public async Task<TemplateVersionDetailDto> GetSurveyTemplateVersionAsync(Guid surveyId, CancellationToken ct = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/surveys/{surveyId}/template-version");
+        AttachAuth(request);
+
+        using var response = await _http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+            throw await BuildApiExceptionAsync(response, "No pude obtener la plantilla del relevamiento.", ct);
+        return await response.Content.ReadFromJsonAsync<TemplateVersionDetailDto>(cancellationToken: ct)
+            ?? throw new InvalidOperationException("Respuesta vacía.");
+    }
+
+    public async Task<IReadOnlyList<PointFieldValueDto>> ListPointFieldValuesAsync(Guid pointId, CancellationToken ct = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/points/{pointId}/field-values");
+        AttachAuth(request);
+
+        using var response = await _http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+            throw await BuildApiExceptionAsync(response, "No pude listar los valores del punto.", ct);
+        return await response.Content.ReadFromJsonAsync<IReadOnlyList<PointFieldValueDto>>(cancellationToken: ct)
+            ?? Array.Empty<PointFieldValueDto>();
+    }
+
     private async Task<SgrApiException> BuildApiExceptionAsync(HttpResponseMessage response, string defaultMsg, CancellationToken ct)
     {
         var problem = await ReadProblemDetailsAsync(response, ct);
@@ -331,3 +364,11 @@ public sealed record FieldDefinitionDto(
     string Type,
     bool Required,
     IReadOnlyList<string>? Options);
+
+/// <summary>Espejo de Sgr.Backend.Api.Controllers.PointFieldValueDto.</summary>
+public sealed record PointFieldValueDto(
+    Guid PointId,
+    string FieldKey,
+    string? ValueJson,
+    DateTime UpdatedAt,
+    Guid UpdatedBy);

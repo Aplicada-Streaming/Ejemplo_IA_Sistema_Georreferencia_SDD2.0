@@ -89,6 +89,58 @@
         @(_capturingPhoto ? "Abriendo cámara..." : (_photo is null ? "Tomar foto (opcional)" : "Re-tomar foto"))
     </MudButton>
 
+    @* ---------- CAMPOS DE PLANTILLA (E.5.b) ---------- *@
+    @if (_fields.Count > 0)
+    {
+        <MudDivider Class="my-3" />
+        <MudText Typo="Typo.subtitle2" Class="mb-2">Datos del punto</MudText>
+
+        @foreach (var f in _fields)
+        {
+            <div class="mt-2">
+                @switch (f.Type)
+                {
+                    case "fecha":
+                        <MudDatePicker Label="@FieldLabel(f)" Editable="true"
+                                       Date="@GetDate(f.Key)"
+                                       DateChanged="@(d => SetDate(f.Key, d))"
+                                       Disabled="_saving" />
+                        break;
+                    case "selección":
+                        <MudSelect T="string" Label="@FieldLabel(f)"
+                                   Value="@(GetString(f.Key) ?? string.Empty)"
+                                   ValueChanged="@(v => SetString(f.Key, v))"
+                                   Variant="Variant.Outlined" Disabled="_saving">
+                            @foreach (var opt in f.Options ?? Array.Empty<string>())
+                            {
+                                <MudSelectItem Value="@opt">@opt</MudSelectItem>
+                            }
+                        </MudSelect>
+                        break;
+                    case "numero":
+                        <MudNumericField T="decimal?" Label="@FieldLabel(f)"
+                                         Value="@GetNumber(f.Key)"
+                                         ValueChanged="@(n => SetNumber(f.Key, n))"
+                                         Variant="Variant.Outlined" Disabled="_saving" />
+                        break;
+                    case "booleano":
+                        <MudCheckBox T="bool" Label="@FieldLabel(f)"
+                                     Value="@(GetBool(f.Key) ?? false)"
+                                     ValueChanged="@(b => SetBool(f.Key, b))"
+                                     Disabled="_saving" />
+                        break;
+                    default: // "texto" o desconocido
+                        <MudTextField T="string" Label="@FieldLabel(f)"
+                                      Value="@GetString(f.Key)"
+                                      ValueChanged="@(v => SetString(f.Key, v))"
+                                      Variant="Variant.Outlined" Disabled="_saving"
+                                      Lines="@(f.Key == "observaciones" ? 3 : 1)" />
+                        break;
+                }
+            </div>
+        }
+    }
+
     @* ---------- MODO + SUBMIT ---------- *@
     <MudSelect T="string" @bind-Value="_captureMode" Label="Modo de captura"
                Variant="Variant.Outlined" Class="mt-3" Disabled="_saving">
@@ -135,6 +187,69 @@
     private string _captureMode = "detenido";
 
     private CameraCaptureResult.Ok? _photo;
+
+    private IReadOnlyList<TemplateField> _fields = Array.Empty<TemplateField>();
+    /// <summary>Valor en memoria por field key. Tipo dinámico: string | decimal | bool | DateTime | null.</summary>
+    private readonly Dictionary<string, object?> _fieldValues = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _fields = await CaptureProfile.ResolveFieldsAsync(SurveyId);
+    }
+
+    private static string FieldLabel(TemplateField f) =>
+        f.Required ? $"{f.Label} *" : f.Label;
+
+    private string? GetString(string key) =>
+        _fieldValues.TryGetValue(key, out var v) ? v as string : null;
+    private decimal? GetNumber(string key) =>
+        _fieldValues.TryGetValue(key, out var v) ? v as decimal? : null;
+    private DateTime? GetDate(string key) =>
+        _fieldValues.TryGetValue(key, out var v) ? v as DateTime? : null;
+    private bool? GetBool(string key) =>
+        _fieldValues.TryGetValue(key, out var v) ? v as bool? : null;
+
+    private void SetString(string key, string? v) => _fieldValues[key] = v;
+    private void SetNumber(string key, decimal? v) => _fieldValues[key] = v;
+    private void SetDate(string key, DateTime? v) => _fieldValues[key] = v;
+    private void SetBool(string key, bool v) => _fieldValues[key] = v;
+
+    /// <summary>Convierte los valores en memoria a JSON crudo para el outbox.
+    /// Devuelve null en valor cuando el campo está vacío y no es required.</summary>
+    private Dictionary<string, string?> SerializeFieldValues()
+    {
+        var result = new Dictionary<string, string?>();
+        foreach (var f in _fields)
+        {
+            if (!_fieldValues.TryGetValue(f.Key, out var raw) || raw is null) continue;
+            string? json = raw switch
+            {
+                string s when string.IsNullOrEmpty(s) => null,
+                string s => System.Text.Json.JsonSerializer.Serialize(s),
+                decimal d => d.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                bool b => b ? "true" : "false",
+                DateTime dt => System.Text.Json.JsonSerializer.Serialize(dt.ToString("yyyy-MM-dd")),
+                _ => null,
+            };
+            if (json is not null)
+                result[f.Key] = json;
+        }
+        return result;
+    }
+
+    private string? ValidateRequiredFields()
+    {
+        foreach (var f in _fields)
+        {
+            if (!f.Required) continue;
+            var present = _fieldValues.TryGetValue(f.Key, out var v)
+                && v is not null
+                && (v is not string s || !string.IsNullOrWhiteSpace(s));
+            if (!present)
+                return $"Falta completar el campo requerido: {f.Label}";
+        }
+        return null;
+    }
 
     private async Task OpenGpsDialogAsync()
     {
@@ -244,6 +359,14 @@
     {
         if (_lat is null || _lng is null) return;
 
+        // Valida campos requeridos antes de tocar el outbox.
+        var missing = ValidateRequiredFields();
+        if (missing is not null)
+        {
+            _error = missing;
+            return;
+        }
+
         _saving = true;
         _error = null;
         try
@@ -251,7 +374,9 @@
             var pointId = Guid.NewGuid();
             var pointTimestamp = _capturedAt ?? DateTime.UtcNow;
 
-            // 1) Encolamos PointCreated SIEMPRE primero — el server necesita el punto antes que la foto.
+            // 1) Encolamos PointCreated + field_updated en una sola op (todos los eventos
+            //    van en la misma PendingOperation y se aplican atómicamente del lado server).
+            var fieldsPayload = SerializeFieldValues();
             var pointOpId = await Enqueue.EnqueuePointCreatedAsync(
                 surveyId: SurveyId,
                 pointId: pointId,
@@ -259,7 +384,8 @@
                 longitude: _lng.Value,
                 accuracyM: _accuracy,
                 captureMode: _captureMode,
-                timestamp: pointTimestamp);
+                timestamp: pointTimestamp,
+                fieldValues: fieldsPayload);
 
             // 2) Si hay foto, la encolamos después: el drainer respeta CreatedAt y procesa
             //    el evento del punto antes que la subida del binario.
@@ -309,6 +435,7 @@
         _capturedAt = null;
         _captureMode = "detenido";
         _error = null;
+        _fieldValues.Clear();
         DiscardPhoto();
     }
 

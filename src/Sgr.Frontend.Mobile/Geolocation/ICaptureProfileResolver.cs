@@ -16,4 +16,18 @@ namespace Sgr.Frontend.Mobile.Geolocation;
 public interface ICaptureProfileResolver
 {
     Task<CaptureModeProfile> ResolveAsync(Guid surveyId, string mode, CancellationToken ct = default);
+
+    /// <summary>
+    /// E.5.b — Devuelve la lista de campos definidos por la plantilla del relevamiento,
+    /// con el mismo policy de cache: red → preferences → vacío como último recurso.
+    /// </summary>
+    Task<IReadOnlyList<TemplateField>> ResolveFieldsAsync(Guid surveyId, CancellationToken ct = default);
 }
+
+/// <summary>Espejo móvil de FieldDefinition (sin atar la app al ensamblado del backend).</summary>
+public sealed record TemplateField(
+    string Key,
+    string Label,
+    string Type,
+    bool Required,
+    IReadOnlyList<string>? Options);

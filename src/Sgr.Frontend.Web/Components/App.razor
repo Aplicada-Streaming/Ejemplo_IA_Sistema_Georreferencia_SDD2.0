@@ -14,7 +14,10 @@
 </head>
 
 <body>
-    <Routes />
+    @* Render mode global InteractiveServer: hace que MainLayout (con MudDialogProvider,
+       MudSnackbarProvider, etc) corra en contexto interactivo. Sin esto los dialogs
+       silenciosamente no abren porque el provider está en una branch estática. *@
+    <Routes @rendermode="InteractiveServer" />
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>
     <script src="lib/leaflet/leaflet.js"></script>
     <script src="_framework/blazor.web.js"></script>

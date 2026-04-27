@@ -10,52 +10,95 @@
         {
             <MudAlert Severity="Severity.Error">@_error</MudAlert>
         }
-        else if (_photos.Count == 0)
-        {
-            <MudAlert Severity="Severity.Info" Icon="@Icons.Material.Filled.PhotoLibrary">
-                Este punto no tiene fotos cargadas.
-            </MudAlert>
-        }
         else
         {
-            <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">
-                @_photos.Count foto@(_photos.Count == 1 ? "" : "s") · @FormatBytes(_photos.Sum(p => p.SizeBytes)) total
-            </MudText>
+            @* ───── Field values (E.5.b) ───── *@
+            @if (_fieldRows.Count > 0)
+            {
+                <MudText Typo="Typo.subtitle1" Class="mb-2">Datos del formulario</MudText>
+                <MudSimpleTable Dense="true" Bordered="false" Striped="true" Hover="false" Class="mb-4">
+                    <tbody>
+                        @foreach (var row in _fieldRows)
+                        {
+                            <tr>
+                                <td style="width:40%;">
+                                    <strong>@row.Label</strong>
+                                    @if (row.Required)
+                                    {
+                                        <span style="color: var(--mud-palette-error);">*</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (string.IsNullOrEmpty(row.DisplayValue))
+                                    {
+                                        <span class="mud-text-secondary">—</span>
+                                    }
+                                    else
+                                    {
+                                        @row.DisplayValue
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            }
+            else if (_template is not null && _template.Fields.Count > 0)
+            {
+                <MudAlert Severity="Severity.Info" Class="mb-3" Icon="@Icons.Material.Filled.Description">
+                    El relevador todavía no cargó los datos del formulario para este punto.
+                </MudAlert>
+            }
 
-            <MudGrid Spacing="2">
-                @foreach (var (photo, dataUrl) in _photoUrls)
-                {
-                    <MudItem xs="12" sm="6">
-                        <MudPaper Elevation="1" Class="pa-2">
-                            @if (dataUrl is null)
-                            {
-                                <MudStack AlignItems="AlignItems.Center" Class="my-4">
-                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
-                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Cargando foto…</MudText>
-                                </MudStack>
-                            }
-                            else
-                            {
-                                <img src="@dataUrl"
-                                     style="width:100%; max-height:400px; object-fit:contain; border-radius:4px;"
-                                     alt="Foto @photo.Id" />
-                            }
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">
-                                @photo.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ·
-                                @FormatBytes(photo.SizeBytes) ·
-                                @photo.AdapterName ·
-                                <span style="font-family: monospace;" title="@photo.ContentHash">
-                                    @photo.ContentHash[..12]…
-                                </span>
-                            </MudText>
-                            @if (!string.IsNullOrWhiteSpace(photo.Comment))
-                            {
-                                <MudText Typo="Typo.body2" Class="mt-1">@photo.Comment</MudText>
-                            }
-                        </MudPaper>
-                    </MudItem>
-                }
-            </MudGrid>
+            @* ───── Fotos ───── *@
+            <MudText Typo="Typo.subtitle1" Class="mb-2">Fotos</MudText>
+            @if (_photos.Count == 0)
+            {
+                <MudAlert Severity="Severity.Info" Icon="@Icons.Material.Filled.PhotoLibrary">
+                    Este punto no tiene fotos cargadas.
+                </MudAlert>
+            }
+            else
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">
+                    @_photos.Count foto@(_photos.Count == 1 ? "" : "s") · @FormatBytes(_photos.Sum(p => p.SizeBytes)) total
+                </MudText>
+
+                <MudGrid Spacing="2">
+                    @foreach (var (photo, dataUrl) in _photoUrls)
+                    {
+                        <MudItem xs="12" sm="6">
+                            <MudPaper Elevation="1" Class="pa-2">
+                                @if (dataUrl is null)
+                                {
+                                    <MudStack AlignItems="AlignItems.Center" Class="my-4">
+                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Cargando foto…</MudText>
+                                    </MudStack>
+                                }
+                                else
+                                {
+                                    <img src="@dataUrl"
+                                         style="width:100%; max-height:400px; object-fit:contain; border-radius:4px;"
+                                         alt="Foto @photo.Id" />
+                                }
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">
+                                    @photo.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ·
+                                    @FormatBytes(photo.SizeBytes) ·
+                                    @photo.AdapterName ·
+                                    <span style="font-family: monospace;" title="@photo.ContentHash">
+                                        @photo.ContentHash[..12]…
+                                    </span>
+                                </MudText>
+                                @if (!string.IsNullOrWhiteSpace(photo.Comment))
+                                {
+                                    <MudText Typo="Typo.body2" Class="mt-1">@photo.Comment</MudText>
+                                }
+                            </MudPaper>
+                        </MudItem>
+                    }
+                </MudGrid>
+            }
         }
     </DialogContent>
     <DialogActions>
@@ -67,21 +110,38 @@
     [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
     [Parameter] public Guid PointId { get; set; }
 
+    /// <summary>SurveyId del punto. Permite resolver el TemplateVersion para mapear
+    /// FieldKey → label/tipo. Si no se pasa, no mostramos la sección de form.</summary>
+    [Parameter] public Guid? SurveyId { get; set; }
+
     private bool _loading = true;
     private string? _error;
     private IReadOnlyList<PhotoSummaryDto> _photos = Array.Empty<PhotoSummaryDto>();
     private List<(PhotoSummaryDto Photo, string? DataUrl)> _photoUrls = new();
+    private TemplateVersionDetailDto? _template;
+    private List<FieldRow> _fieldRows = new();
 
     protected override async Task OnInitializedAsync()
     {
         try
         {
-            _photos = await Api.ListPointPhotosAsync(PointId);
+            // Cargamos en paralelo: fotos, valores del form, plantilla.
+            var photosTask = Api.ListPointPhotosAsync(PointId);
+            var valuesTask = Api.ListPointFieldValuesAsync(PointId);
+            var templateTask = SurveyId is { } sid
+                ? Api.GetSurveyTemplateVersionAsync(sid)
+                : Task.FromResult<TemplateVersionDetailDto>(null!);
+
+            await Task.WhenAll(photosTask, valuesTask, templateTask);
+
+            _photos = photosTask.Result;
             _photoUrls = _photos.Select(p => ((PhotoSummaryDto, string?))(p, null)).ToList();
+            _template = SurveyId is null ? null : templateTask.Result;
+            _fieldRows = BuildFieldRows(_template, valuesTask.Result);
         }
         catch (Exception ex)
         {
-            _error = $"No pude listar las fotos: {ex.Message}";
+            _error = $"No pude cargar el detalle: {ex.Message}";
             _loading = false;
             return;
         }
@@ -89,9 +149,7 @@
         _loading = false;
         StateHasChanged();
 
-        // Cargamos los binarios uno a uno y los renderizamos como data: URL.
-        // Para fotos chicas-medianas (típicamente <5MB) esto es suficiente; para
-        // catálogos grandes habría que hacer thumbnails server-side (deuda pendiente).
+        // Cargamos los binarios de fotos uno a uno y los renderizamos como data: URL.
         for (int i = 0; i < _photos.Count; i++)
         {
             var p = _photos[i];
@@ -111,6 +169,54 @@
         }
     }
 
+    private static List<FieldRow> BuildFieldRows(
+        TemplateVersionDetailDto? template,
+        IReadOnlyList<PointFieldValueDto> values)
+    {
+        if (template is null) return new();
+        var byKey = values.ToDictionary(v => v.FieldKey, v => v);
+
+        // Conservamos el orden definido por la plantilla (no por el orden de captura).
+        return template.Fields.Select(f =>
+        {
+            byKey.TryGetValue(f.Key, out var v);
+            return new FieldRow(
+                Label: f.Label,
+                Required: f.Required,
+                DisplayValue: FormatValue(f.Type, v?.ValueJson));
+        }).ToList();
+    }
+
+    private static string FormatValue(string type, string? rawJson)
+    {
+        if (string.IsNullOrWhiteSpace(rawJson)) return string.Empty;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(rawJson);
+            var root = doc.RootElement;
+            return type switch
+            {
+                "fecha" => root.ValueKind == System.Text.Json.JsonValueKind.String
+                    ? root.GetString() ?? string.Empty
+                    : root.ToString(),
+                "booleano" => root.ValueKind switch
+                {
+                    System.Text.Json.JsonValueKind.True => "Sí",
+                    System.Text.Json.JsonValueKind.False => "No",
+                    _ => root.ToString(),
+                },
+                "numero" => root.ToString(),
+                _ => root.ValueKind == System.Text.Json.JsonValueKind.String
+                    ? root.GetString() ?? string.Empty
+                    : root.ToString(),
+            };
+        }
+        catch
+        {
+            return rawJson;
+        }
+    }
+
     private void Close() => Dialog.Close();
 
     private static string FormatBytes(long bytes)
@@ -119,4 +225,6 @@
         if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
         return $"{bytes / (1024.0 * 1024.0):F2} MB";
     }
+
+    private sealed record FieldRow(string Label, bool Required, string DisplayValue);
 }

@@ -6,7 +6,8 @@ namespace Sgr.Frontend.Mobile.Geolocation;
 
 public sealed class RemoteCaptureProfileResolver : ICaptureProfileResolver
 {
-    private const string CachePrefix = "sgr.captureparams.";
+    private const string CapturePrefix = "sgr.captureparams.";
+    private const string FieldsPrefix = "sgr.fields.";
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
 
     private readonly ISgrApiClient _api;
@@ -45,30 +46,55 @@ public sealed class RemoteCaptureProfileResolver : ICaptureProfileResolver
         }
     }
 
+    public async Task<IReadOnlyList<TemplateField>> ResolveFieldsAsync(Guid surveyId, CancellationToken ct = default)
+    {
+        var fieldsJson = await GetTemplateSubObjectAsync(surveyId, "fields", FieldsPrefix, ct);
+        if (string.IsNullOrEmpty(fieldsJson)) return Array.Empty<TemplateField>();
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<TemplateField>>(fieldsJson, JsonOpts)
+                ?? new List<TemplateField>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Falló parsear fields de survey {SurveyId}.", surveyId);
+            return Array.Empty<TemplateField>();
+        }
+    }
+
     /// <summary>
     /// Trae el JSON crudo de captureParams: primero la red, luego el cache.
     /// Devuelve null si no se pudo obtener de ningún lado.
     /// </summary>
-    private async Task<string?> GetCaptureParamsJsonAsync(Guid surveyId, CancellationToken ct)
+    private Task<string?> GetCaptureParamsJsonAsync(Guid surveyId, CancellationToken ct) =>
+        GetTemplateSubObjectAsync(surveyId, "captureParams", CapturePrefix, ct);
+
+    /// <summary>
+    /// Helper genérico: baja la plantilla del survey, extrae el sub-objeto pedido
+    /// (<c>captureParams</c> o <c>fields</c>), lo cachea y devuelve su JSON crudo.
+    /// </summary>
+    private async Task<string?> GetTemplateSubObjectAsync(
+        Guid surveyId, string propertyName, string cachePrefix, CancellationToken ct)
     {
-        var cacheKey = CachePrefix + surveyId.ToString("N");
+        var cacheKey = cachePrefix + surveyId.ToString("N");
 
         try
         {
             var raw = await _api.GetSurveyTemplateVersionRawAsync(surveyId, ct);
             using var doc = JsonDocument.Parse(raw);
-            if (doc.RootElement.TryGetProperty("captureParams", out var cp))
+            if (doc.RootElement.TryGetProperty(propertyName, out var sub))
             {
-                var captureJson = cp.GetRawText();
-                Preferences.Default.Set(cacheKey, captureJson);
-                return captureJson;
+                var json = sub.GetRawText();
+                Preferences.Default.Set(cacheKey, json);
+                return json;
             }
         }
         catch (Exception ex)
         {
             _logger.LogInformation(ex,
-                "No pude bajar plantilla de survey {SurveyId} (offline?). Intento cache.",
-                surveyId);
+                "No pude bajar plantilla de survey {SurveyId} (offline?). Intento cache para {Prop}.",
+                surveyId, propertyName);
         }
 
         var cached = Preferences.Default.Get(cacheKey, string.Empty);

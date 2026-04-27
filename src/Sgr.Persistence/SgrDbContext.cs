@@ -16,6 +16,7 @@ public class SgrDbContext : DbContext
     public DbSet<TemplateVersion> TemplateVersions => Set<TemplateVersion>();
     public DbSet<Survey> Surveys => Set<Survey>();
     public DbSet<Point> Points => Set<Point>();
+    public DbSet<PointFieldValue> PointFieldValues => Set<PointFieldValue>();
     public DbSet<Photo> Photos => Set<Photo>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
 

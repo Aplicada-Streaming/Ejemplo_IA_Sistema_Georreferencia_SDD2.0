@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Sgr.Persistence;
 
@@ -11,9 +12,11 @@ using Sgr.Persistence;
 namespace Sgr.Persistence.Migrations
 {
     [DbContext(typeof(SgrDbContext))]
-    partial class SgrDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260427120409_AddPointFieldValues")]
+    partial class AddPointFieldValues
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
