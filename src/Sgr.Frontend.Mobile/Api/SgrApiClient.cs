@@ -18,6 +18,21 @@ public interface ISgrApiClient
     /// pueda persistir el JSON exacto que se envió y reusarlo en reintentos sin reserialización.
     /// </summary>
     Task<SyncPushResponseDto> PushEventsRawAsync(string eventsJson, CancellationToken ct = default);
+
+    /// <summary>
+    /// E.3.3: subida multipart de una foto capturada. Idempotente por <paramref name="photoId"/>
+    /// (si el server ya tiene esa foto, se considera Sent). El stream se consume una sola vez
+    /// y queda al cargo del caller cerrarlo.
+    /// </summary>
+    Task<PhotoCreatedDto> UploadPhotoAsync(
+        Guid pointId,
+        Guid photoId,
+        Stream content,
+        string fileName,
+        string mimeType,
+        string? comment,
+        string origin,
+        CancellationToken ct = default);
 }
 
 public sealed class SgrApiClient : ISgrApiClient
@@ -123,6 +138,45 @@ public sealed class SgrApiClient : ISgrApiClient
             {
                 Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() },
             }, ct) ?? throw new InvalidOperationException("Respuesta del sync vacía.");
+    }
+
+    public async Task<PhotoCreatedDto> UploadPhotoAsync(
+        Guid pointId,
+        Guid photoId,
+        Stream content,
+        string fileName,
+        string mimeType,
+        string? comment,
+        string origin,
+        CancellationToken ct = default)
+    {
+        using var form = new MultipartFormDataContent();
+        var fileContent = new StreamContent(content);
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue(mimeType);
+        form.Add(fileContent, "File", fileName);
+        form.Add(new StringContent(pointId.ToString()), "PointId");
+        form.Add(new StringContent(photoId.ToString()), "PhotoId");
+        if (!string.IsNullOrWhiteSpace(comment))
+            form.Add(new StringContent(comment), "Comment");
+        form.Add(new StringContent(origin), "Origin");
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/photos") { Content = form };
+        await AttachAuthAsync(request);
+
+        using var response = await _http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            var problem = await ReadProblemAsync(response, ct);
+            throw new SgrApiException(
+                (int)response.StatusCode,
+                problem?.Title ?? response.ReasonPhrase ?? "Error",
+                problem?.Detail ?? "Upload de foto falló.",
+                problem?.ErrorCode);
+        }
+
+        return await response.Content.ReadFromJsonAsync<PhotoCreatedDto>(
+            new JsonSerializerOptions(JsonSerializerDefaults.Web), ct)
+            ?? throw new InvalidOperationException("Respuesta vacía del upload.");
     }
 
     private async Task AttachAuthAsync(HttpRequestMessage request)
@@ -256,3 +310,11 @@ public sealed record SyncEventResultDto(
     Guid EventId,
     string Outcome,    // "Applied" | "Idempotent" | "LosesLWW" | "LosesOwnerPrecedence" | "RejectedPostClose" | ...
     string? Message);
+
+/// <summary>Espejo del PhotoCreatedDto del backend (PhotosController).</summary>
+public sealed record PhotoCreatedDto(
+    Guid Id,
+    string AdapterName,
+    string AdapterRef,
+    long SizeBytes,
+    string ContentHash);

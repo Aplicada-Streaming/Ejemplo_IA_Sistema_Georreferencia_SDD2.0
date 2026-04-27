@@ -4,7 +4,11 @@ public interface IPendingOperationStore
 {
     Task InitializeAsync();
 
+    /// <summary>Encola una operación de sync (eventos JSON al backend).</summary>
     Task<string> EnqueueAsync(string surveyId, string eventsJson, DateTime now);
+
+    /// <summary>Encola una subida de foto: metadata JSON + path al archivo local.</summary>
+    Task<string> EnqueuePhotoAsync(string surveyId, string metadataJson, string localFilePath, DateTime now);
 
     Task<IReadOnlyList<PendingOperation>> GetReadyAsync(DateTime now, int limit = 20);
 

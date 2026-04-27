@@ -15,4 +15,9 @@
   <!-- Geolocalización (US-06 Slice 3.1). FINE = GPS preciso; COARSE = fallback por red/WiFi. -->
   <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
   <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+  <!-- Cámara (US-06 Slice 3.3). MediaPicker delega en la app de cámara nativa, pero
+       declarar el permiso da UX consistente y permite filtrado en Play Store. -->
+  <uses-permission android:name="android.permission.CAMERA" />
+  <uses-feature android:name="android.hardware.camera" android:required="false" />
 </manifest>

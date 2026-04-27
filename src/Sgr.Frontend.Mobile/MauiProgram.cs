@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using MudBlazor.Services;
 using Sgr.Frontend.Mobile.Api;
 using Sgr.Frontend.Mobile.Auth;
+using Sgr.Frontend.Mobile.Camera;
 using Sgr.Frontend.Mobile.Geolocation;
 using Sgr.Frontend.Mobile.Outbox;
 
@@ -55,6 +56,9 @@ public static class MauiProgram
 
         // GPS / geolocalización (E.3.1, US-06 parcial: máquina S0-S3 sin foto/mapa).
         builder.Services.AddSingleton<IGeolocationService, MauiGeolocationService>();
+
+        // Cámara + foto (E.3.3, US-06).
+        builder.Services.AddSingleton<ICameraCaptureService, MauiCameraCaptureService>();
 
 #if DEBUG
         builder.Services.AddBlazorWebViewDeveloperTools();

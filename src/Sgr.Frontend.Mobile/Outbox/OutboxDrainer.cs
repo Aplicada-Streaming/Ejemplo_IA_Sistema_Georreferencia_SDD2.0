@@ -1,4 +1,5 @@
 using System.Net.Http;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Sgr.Frontend.Mobile.Api;
 
@@ -97,11 +98,17 @@ public sealed class OutboxDrainer : IOutboxDrainer, IDisposable
 
         try
         {
-            var response = await _api.PushEventsRawAsync(op.EventsJson, ct);
+            switch (op.Kind)
+            {
+                case OperationKind.PhotoUpload:
+                    await PushPhotoAsync(op, ct);
+                    break;
+                case OperationKind.SyncEvent:
+                default:
+                    await PushSyncEventsAsync(op, ct);
+                    break;
+            }
             await _store.MarkSentAsync(op.Id, DateTime.UtcNow);
-            _logger.LogInformation(
-                "Pushed outbox op {OpId}: received={Received}, applied={Applied}, skipped={Skipped}",
-                op.Id, response.Received, response.Applied, response.Skipped);
             return (1, 0, 0);
         }
         catch (HttpRequestException ex)
@@ -121,10 +128,57 @@ public sealed class OutboxDrainer : IOutboxDrainer, IDisposable
             // 4xx no transitorio (excepto 408/429): error de payload o autorización. Terminal de inmediato.
             return await HandleErrorAsync(op, ex, transient: false, ct, forceTerminal: true);
         }
+        catch (FileNotFoundException ex)
+        {
+            // Foto local desaparecida (limpieza externa, app reinstalada, etc.). No-recoverable.
+            return await HandleErrorAsync(op, ex, transient: false, ct, forceTerminal: true);
+        }
         catch (Exception ex)
         {
             return await HandleErrorAsync(op, ex, transient: true, ct);
         }
+    }
+
+    private async Task PushSyncEventsAsync(PendingOperation op, CancellationToken ct)
+    {
+        var response = await _api.PushEventsRawAsync(op.EventsJson, ct);
+        _logger.LogInformation(
+            "Pushed outbox op {OpId}: received={Received}, applied={Applied}, skipped={Skipped}",
+            op.Id, response.Received, response.Applied, response.Skipped);
+    }
+
+    private async Task PushPhotoAsync(PendingOperation op, CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(op.LocalFilePath))
+            throw new InvalidOperationException("photo_upload sin LocalFilePath.");
+        if (!File.Exists(op.LocalFilePath))
+            throw new FileNotFoundException("Foto local desaparecida.", op.LocalFilePath);
+
+        var meta = JsonSerializer.Deserialize<PhotoUploadMetadata>(op.EventsJson,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web))
+            ?? throw new InvalidOperationException("Metadata de foto inválida en outbox.");
+
+        await using (var fs = new FileStream(op.LocalFilePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            var result = await _api.UploadPhotoAsync(
+                pointId: meta.PointId,
+                photoId: meta.PhotoId,
+                content: fs,
+                fileName: meta.FileName,
+                mimeType: meta.MimeType,
+                comment: meta.Comment,
+                origin: meta.Origin,
+                ct: ct);
+
+            _logger.LogInformation(
+                "Photo subida {OpId}: photoId={PhotoId}, adapter={Adapter}, size={Size} bytes, hash={Hash}",
+                op.Id, result.Id, result.AdapterName, result.SizeBytes, result.ContentHash);
+        }
+
+        // Best-effort cleanup. Si falla la borrada el outbox marca Sent igual: peor caso quedan
+        // bytes en AppDataDirectory que se limpiarán al desinstalar la app.
+        try { File.Delete(op.LocalFilePath); }
+        catch (Exception ex) { _logger.LogWarning(ex, "No pude borrar foto local {Path}.", op.LocalFilePath); }
     }
 
     private async Task<(int sent, int failedTransient, int failedTerminal)> HandleErrorAsync(

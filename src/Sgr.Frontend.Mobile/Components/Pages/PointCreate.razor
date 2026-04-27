@@ -3,6 +3,7 @@
 @inject IOutboxEnqueueService Enqueue
 @inject IOutboxDrainer Drainer
 @inject IDialogService Dialogs
+@inject ICameraCaptureService Camera
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
 
@@ -12,9 +13,10 @@
 
 <MudPaper Class="pa-4" Elevation="2">
     <MudAlert Severity="Severity.Info" Class="mb-3" Icon="@Icons.Material.Filled.GpsFixed">
-        Slice 3.1: captura GPS sin foto. La cámara y el modo móvil con radio llegan en 3.3 / 3.5.
+        Slice 3.3: GPS + foto vía outbox. El mapa y los modos detenido/móvil llegan en 3.4 / 3.5.
     </MudAlert>
 
+    @* ---------- GPS ---------- *@
     @if (_lat is null || _lng is null)
     {
         <MudPaper Class="pa-4 mb-3" Elevation="0" Style="text-align:center; background: var(--mud-palette-background-grey);">
@@ -58,6 +60,35 @@
         @(_lat is null ? "Obtener GPS" : "Reintentar GPS")
     </MudButton>
 
+    @* ---------- FOTO (E.3.3) ---------- *@
+    <MudDivider Class="my-3" />
+
+    @if (_photo is not null)
+    {
+        <MudPaper Class="pa-3 mb-2" Elevation="0" Style="background: var(--mud-palette-info-lighten);">
+            <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Filled.PhotoCamera" Color="Color.Info" />
+                <div style="flex:1; min-width:0;">
+                    <MudText Typo="Typo.body2"><strong>Foto lista</strong></MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        @_photo.FileName · @FormatBytes(_photo.SizeBytes)
+                    </MudText>
+                </div>
+                <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                               Disabled="_saving" OnClick="DiscardPhoto" />
+            </MudStack>
+        </MudPaper>
+    }
+
+    <MudButton Variant="@(_photo is null ? Variant.Filled : Variant.Outlined)"
+               Color="Color.Secondary" FullWidth="true"
+               StartIcon="@Icons.Material.Filled.PhotoCamera"
+               OnClick="CapturePhotoAsync"
+               Disabled="_saving || _capturingPhoto">
+        @(_capturingPhoto ? "Abriendo cámara..." : (_photo is null ? "Tomar foto (opcional)" : "Re-tomar foto"))
+    </MudButton>
+
+    @* ---------- MODO + SUBMIT ---------- *@
     <MudSelect T="string" @bind-Value="_captureMode" Label="Modo de captura"
                Variant="Variant.Outlined" Class="mt-3" Disabled="_saving">
         <MudSelectItem Value="@("detenido")">Detenido</MudSelectItem>
@@ -85,6 +116,7 @@
     [Parameter] public Guid SurveyId { get; set; }
 
     private bool _saving;
+    private bool _capturingPhoto;
     private string? _error;
 
     private decimal? _lat;
@@ -94,6 +126,8 @@
     private DateTime? _capturedAt;
 
     private string _captureMode = "detenido";
+
+    private CameraCaptureResult.Ok? _photo;
 
     private async Task OpenGpsDialogAsync()
     {
@@ -140,6 +174,55 @@
         }
     }
 
+    private async Task CapturePhotoAsync()
+    {
+        _error = null;
+        _capturingPhoto = true;
+        try
+        {
+            // Si ya había una foto previa cargada, la borramos antes de capturar otra,
+            // para no acumular bytes en AppDataDirectory por descarte.
+            DiscardPhoto();
+
+            var photoId = Guid.NewGuid();
+            var result = await Camera.CaptureAsync(photoId);
+
+            switch (result)
+            {
+                case CameraCaptureResult.Ok ok:
+                    _photo = ok;
+                    Snackbar.Add($"Foto lista ({FormatBytes(ok.SizeBytes)}).", Severity.Success);
+                    break;
+                case CameraCaptureResult.Cancelled:
+                    // silencioso
+                    break;
+                case CameraCaptureResult.PermissionDenied pd:
+                    _error = pd.IsPermanent
+                        ? "Permiso de cámara bloqueado. Activalo en los ajustes del sistema."
+                        : "Necesitamos permiso de cámara para tomar la foto.";
+                    break;
+                case CameraCaptureResult.NotSupported:
+                    _error = "Este dispositivo no tiene cámara o no la soporta.";
+                    break;
+                case CameraCaptureResult.Error err:
+                    _error = $"Error al capturar: {err.Message}";
+                    break;
+            }
+        }
+        finally
+        {
+            _capturingPhoto = false;
+        }
+    }
+
+    private void DiscardPhoto()
+    {
+        if (_photo is null) return;
+        try { if (File.Exists(_photo.LocalFilePath)) File.Delete(_photo.LocalFilePath); }
+        catch { /* best-effort, no bloquea UX */ }
+        _photo = null;
+    }
+
     private async Task SubmitAsync()
     {
         if (_lat is null || _lng is null) return;
@@ -149,17 +232,43 @@
         try
         {
             var pointId = Guid.NewGuid();
-            var opId = await Enqueue.EnqueuePointCreatedAsync(
+            var pointTimestamp = _capturedAt ?? DateTime.UtcNow;
+
+            // 1) Encolamos PointCreated SIEMPRE primero — el server necesita el punto antes que la foto.
+            var pointOpId = await Enqueue.EnqueuePointCreatedAsync(
                 surveyId: SurveyId,
                 pointId: pointId,
                 latitude: _lat.Value,
                 longitude: _lng.Value,
                 accuracyM: _accuracy,
                 captureMode: _captureMode,
-                timestamp: _capturedAt ?? DateTime.UtcNow);
+                timestamp: pointTimestamp);
 
-            Snackbar.Add($"Punto encolado (op {opId[..8]}…). Se envía cuando haya conexión.",
-                Severity.Success);
+            // 2) Si hay foto, la encolamos después: el drainer respeta CreatedAt y procesa
+            //    el evento del punto antes que la subida del binario.
+            string? photoOpId = null;
+            if (_photo is not null)
+            {
+                var photoId = Guid.NewGuid();
+                photoOpId = await Enqueue.EnqueuePhotoCapturedAsync(
+                    surveyId: SurveyId,
+                    pointId: pointId,
+                    photoId: photoId,
+                    localFilePath: _photo.LocalFilePath,
+                    fileName: _photo.FileName,
+                    mimeType: _photo.MimeType,
+                    comment: null,
+                    capturedAt: _photo.CapturedAtUtc);
+
+                // Importante: a partir de acá la foto pertenece al outbox; no la borramos local
+                // hasta que el drainer confirme upload exitoso.
+                _photo = null;
+            }
+
+            var msg = photoOpId is null
+                ? $"Punto encolado (op {pointOpId[..8]}…). Se envía cuando haya conexión."
+                : $"Punto + foto encolados (ops {pointOpId[..8]}…/{photoOpId[..8]}…). Se envían cuando haya conexión.";
+            Snackbar.Add(msg, Severity.Success);
 
             _ = Drainer.DrainOnceAsync();
             ResetAndContinue();
@@ -183,5 +292,13 @@
         _capturedAt = null;
         _captureMode = "detenido";
         _error = null;
+        DiscardPhoto();
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
+        return $"{bytes / (1024.0 * 1024.0):F2} MB";
     }
 }

@@ -42,11 +42,35 @@ public sealed class SqlitePendingOperationStore : IPendingOperationStore
         {
             Id = Guid.NewGuid().ToString("N"),
             SurveyId = surveyId,
+            Kind = OperationKind.SyncEvent,
             EventsJson = eventsJson,
+            LocalFilePath = null,
             Status = OutboxStatus.Pending,
             Attempts = 0,
             LastError = null,
             NextRetryAt = now,            // listo para enviarse ya
+            CreatedAt = now,
+            LastAttemptAt = null,
+            SentAt = null,
+        };
+        await _conn!.InsertAsync(op);
+        return op.Id;
+    }
+
+    public async Task<string> EnqueuePhotoAsync(string surveyId, string metadataJson, string localFilePath, DateTime now)
+    {
+        await EnsureInitAsync();
+        var op = new PendingOperation
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            SurveyId = surveyId,
+            Kind = OperationKind.PhotoUpload,
+            EventsJson = metadataJson,
+            LocalFilePath = localFilePath,
+            Status = OutboxStatus.Pending,
+            Attempts = 0,
+            LastError = null,
+            NextRetryAt = now,
             CreatedAt = now,
             LastAttemptAt = null,
             SentAt = null,

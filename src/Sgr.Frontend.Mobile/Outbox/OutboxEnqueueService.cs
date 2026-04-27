@@ -22,6 +22,21 @@ public interface IOutboxEnqueueService
         decimal? accuracyM,
         string captureMode,
         DateTime timestamp);
+
+    /// <summary>
+    /// E.3.3: encola la subida de una foto capturada. La foto física tiene que estar
+    /// ya copiada a una ubicación persistente (no temp dir): el caller pasa la ruta
+    /// absoluta vía <paramref name="localFilePath"/>. Después de subirse, el drainer borra el archivo.
+    /// </summary>
+    Task<string> EnqueuePhotoCapturedAsync(
+        Guid surveyId,
+        Guid pointId,
+        Guid photoId,
+        string localFilePath,
+        string fileName,
+        string mimeType,
+        string? comment,
+        DateTime capturedAt);
 }
 
 public sealed class OutboxEnqueueService : IOutboxEnqueueService
@@ -77,4 +92,50 @@ public sealed class OutboxEnqueueService : IOutboxEnqueueService
         var eventsJson = JsonSerializer.Serialize(new[] { ev }, JsonOptions);
         return await _store.EnqueueAsync(surveyId.ToString(), eventsJson, DateTime.UtcNow);
     }
+
+    public async Task<string> EnqueuePhotoCapturedAsync(
+        Guid surveyId,
+        Guid pointId,
+        Guid photoId,
+        string localFilePath,
+        string fileName,
+        string mimeType,
+        string? comment,
+        DateTime capturedAt)
+    {
+        if (!File.Exists(localFilePath))
+            throw new FileNotFoundException("La foto local no existe.", localFilePath);
+
+        var session = await _tokens.GetAsync()
+            ?? throw new InvalidOperationException("Sesión no disponible para encolar fotos.");
+
+        var metadata = new PhotoUploadMetadata(
+            PhotoId: photoId,
+            PointId: pointId,
+            FileName: fileName,
+            MimeType: mimeType,
+            Comment: comment,
+            Origin: "mobile_capture",
+            AuthorId: session.UserId,
+            DeviceId: _device.GetDeviceId(),
+            CapturedAtUtc: capturedAt);
+
+        var metadataJson = JsonSerializer.Serialize(metadata, JsonOptions);
+        return await _store.EnqueuePhotoAsync(surveyId.ToString(), metadataJson, localFilePath, DateTime.UtcNow);
+    }
 }
+
+/// <summary>
+/// Persistido en <c>PendingOperation.EventsJson</c> cuando <c>Kind = photo_upload</c>.
+/// El drainer lo deserializa para construir el multipart hacia <c>POST /api/v1/photos</c>.
+/// </summary>
+public sealed record PhotoUploadMetadata(
+    Guid PhotoId,
+    Guid PointId,
+    string FileName,
+    string MimeType,
+    string? Comment,
+    string Origin,
+    Guid AuthorId,
+    string? DeviceId,
+    DateTime CapturedAtUtc);
