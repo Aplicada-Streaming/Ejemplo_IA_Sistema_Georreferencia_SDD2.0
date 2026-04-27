@@ -22,7 +22,7 @@
 ## Alcance
 - Migración inicial seed con plantilla raíz `is_root=1`, `is_deletable=0`, versión 1 publicada.
 - Campos comunes: fecha, ubicación (auto), condición general, observaciones, prioridad.
-- Parámetros de captura default: gps_timeout=30, accuracy=50, radio modo móvil=10, photo_max_long=2048, photo_quality=85.
+- Parámetros de captura default: gps_timeout=30, accuracy=50, radio modo recorrido (`movil_radius_m`)=10, photo_max_long=2048, photo_quality=85.
 - Validación que rechaza eliminación.
 
 ## Criterios de aceptación

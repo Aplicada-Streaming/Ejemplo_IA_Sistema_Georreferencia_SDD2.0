@@ -28,7 +28,7 @@ Roadmap estructurado en **Fases → Épicas → Milestones**, alineado a la deci
 │  FASE 1 — Núcleo Multi-Colaborador                                 │
 │   Slice 1: Sync entre dos dispositivos                             │
 │   Slice 2: Captura modo detenido + plantilla raíz                  │
-│   Slice 3: Modo móvil con radio configurable                       │
+│   Slice 3: Modo recorrido con radio configurable                   │
 └────────────────────────────────────────────────────────────────────┘
                               │
                               ▼

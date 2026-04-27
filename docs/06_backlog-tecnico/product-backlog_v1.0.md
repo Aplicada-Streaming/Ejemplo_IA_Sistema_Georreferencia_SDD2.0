@@ -47,7 +47,7 @@ Las US están agrupadas por épica del roadmap. La columna **Sprint sugerido** e
 | [US-05](user-stories/US-05-pull-diferencial_v1.0.md) | Pull diferencial de eventos al móvil | EP-01.1 | Must | 8 | Slice 1 |
 | [US-06](user-stories/US-06-plantilla-raiz_v1.0.md) | Plantilla raíz con campos comunes y parámetros de captura | EP-01.2 | Must | 8 | Slice 2 |
 | [US-07](user-stories/US-07-captura-modo-detenido_v1.0.md) | Captura modo detenido con diálogo unificado | EP-01.2 | Must | 13 | Slice 2 |
-| [US-08](user-stories/US-08-modo-movil-radio_v1.0.md) | Modo móvil con radio configurable | EP-01.3 | Must | 8 | Slice 3 |
+| [US-08](user-stories/US-08-modo-movil-radio_v1.0.md) | Modo recorrido con radio configurable | EP-01.3 | Must | 8 | Slice 3 |
 
 ### Fase 2 — Gestión y Plantillas
 

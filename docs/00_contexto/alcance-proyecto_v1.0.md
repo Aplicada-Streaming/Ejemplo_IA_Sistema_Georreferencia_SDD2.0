@@ -48,7 +48,7 @@ Este documento delimita qué incluye y qué excluye el MVP del sistema, y establ
 - Foto con georreferenciación automática + asociación a punto existente / creación de punto nuevo.
 - Mapa colaborativo con todos los marcadores del relevamiento, centrado en GPS actual, reubicación manual de marcador antes de la foto.
 - Doble-tap sobre marcador → catálogo del punto: previsualización, edición de comentarios y descripción de fotos individuales.
-- Modo móvil con radio configurable y modo detenido; conmutación entre modos en cualquier momento.
+- Modo recorrido con radio configurable y modo detenido; conmutación entre modos en cualquier momento. (`captureMode="movil"` interno se conserva por compat.)
 
 #### Carga manual desde web
 - Subida en lote de fotos previas con extracción de coordenadas EXIF.

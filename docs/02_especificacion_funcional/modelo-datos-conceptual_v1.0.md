@@ -108,7 +108,7 @@ Cada vez que una plantilla se publica, se genera una versión inmutable. Los rel
 | estado | enumeración | `borrador` \| `publicada` |
 | fecha de publicación | fecha \| null | — |
 | campos definidos | colección de DefiniciónDeCampo | Resultado de aplicar herencia con la plantilla padre |
-| parámetros de captura | objeto | Timeout GPS, accuracy threshold, radio del modo móvil, parámetros de compresión de fotos, threshold de fusión |
+| parámetros de captura | objeto | Timeout GPS, accuracy threshold, radio del modo recorrido (`movil_radius_m`), parámetros de compresión de fotos, threshold de fusión |
 
 > Una vez publicada, una versión no puede modificarse. Ver [RN-05](reglas-de-negocio/RN-05-inmutabilidad-plantilla-publicada_v1.0.md).
 

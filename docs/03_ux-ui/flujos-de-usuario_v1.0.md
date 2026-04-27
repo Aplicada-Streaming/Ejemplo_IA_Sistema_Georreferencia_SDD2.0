@@ -108,7 +108,7 @@ Idéntico a F-A1 pero accedido desde "Configuración del sistema" en lugar del w
    ▼
 [Editor de plantilla]
    │ ┌─ Tab "Campos": agregar / sobrescribir / marcar "no aplica"
-   │ ├─ Tab "Parámetros de captura": GPS timeout, accuracy, radio modo móvil, compresión foto
+   │ ├─ Tab "Parámetros de captura": GPS timeout, accuracy, radio modo recorrido, compresión foto
    │ └─ Tab "Validación": min/max, requerido, opciones de selección
    │
    ▼

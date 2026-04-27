@@ -32,7 +32,7 @@
    - **Agregar campos nuevos** propios de la hija.
    - **Sobrescribir atributos visuales o de validación** de campos heredados (etiqueta, hint, min/max, requerido).
    - **Marcar como "no aplica"** un campo heredado para que no se renderice en relevamientos sobre esta plantilla.
-5. El jefe configura los **parámetros de captura** específicos: timeout GPS, accuracy threshold, radio del modo móvil, parámetros de compresión, threshold de fusión.
+5. El jefe configura los **parámetros de captura** específicos: timeout GPS, accuracy threshold, radio del modo recorrido (`movil_radius_m`), parámetros de compresión, threshold de fusión.
 6. El jefe guarda como `borrador` (editable) o **publica** (inmutable).
 7. Al publicar: el sistema incrementa el número de versión y deja la plantilla disponible para crear relevamientos.
 

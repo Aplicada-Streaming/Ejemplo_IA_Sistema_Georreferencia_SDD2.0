@@ -26,7 +26,7 @@
 - Resumen post-procesamiento.
 
 ## Criterios de aceptación
-- **CA-15.1** Lote 50 fotos con EXIF en modo móvil radio 10m → puntos por proximidad espacial y temporal.
+- **CA-15.1** Lote 50 fotos con EXIF en modo recorrido radio 10m → puntos por proximidad espacial y temporal.
 - **CA-15.2** Lote en modo detenido → todas las fotos al mismo punto.
 - **CA-15.3** Comentarios genéricos creados con fecha de carga.
 - **CA-15.4** Foto sin EXIF → encolada en pendientes (cubierto por US-16).

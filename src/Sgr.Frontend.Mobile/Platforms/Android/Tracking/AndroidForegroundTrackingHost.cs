@@ -32,7 +32,9 @@ public sealed class AndroidForegroundTrackingHost : IForegroundTrackingHost
             intent.PutExtra(TrackingForegroundService.ExtraTitle, title);
             intent.PutExtra(TrackingForegroundService.ExtraDescription, description);
 
-            if (Build.VERSION.SdkInt >= BuildVersionCodes.O)
+            // OperatingSystem.IsAndroidVersionAtLeast es el version-gate que CA1416 reconoce
+            // (Build.VERSION.SdkInt funciona en runtime pero el analizador no lo silencia).
+            if (OperatingSystem.IsAndroidVersionAtLeast(26))
                 ctx.StartForegroundService(intent);
             else
                 ctx.StartService(intent);

@@ -22,7 +22,7 @@ Plan tentativo de los sprints que conforman el MVP. Solo los **Sprint 0** y **Sp
 | **Sprint 0** | EP-00.1 + Spike | Walking skeleton + spike sync | US-01, US-02 + 10 BTs | 64 (BT-pesado) | Slice trivial end-to-end + spike validado |
 | **Sprint 1** | EP-01.1 — Slice 1 | Sync entre dos dispositivos | US-03, US-04, US-05 | 34 | Dos dispositivos sincronizan puntos vacíos |
 | **Sprint 2** | EP-01.2 — Slice 2 | Captura modo detenido + plantilla raíz | US-06, US-07 | 21 | Captura real con foto + GPS + comentarios |
-| **Sprint 3** | EP-01.3 — Slice 3 | Modo móvil con radio | US-08 | 8 (+ buffer) | Modo móvil funcionando con radio |
+| **Sprint 3** | EP-01.3 — Slice 3 | Modo recorrido con radio | US-08 | 8 (+ buffer) | Modo recorrido funcionando con radio (UX label "Recorrido"; `captureMode="movil"` interno) |
 | **Sprint 4** | EP-02.1 — Slice 4 | Edición desde web + mapa colaborativo | US-09, US-10 | 21 | Revisión completa desde web |
 | **Sprint 5** | EP-02.2 — Slice 5 | Plantillas hijas + renderizado dinámico | US-11, US-12 | 21 | Inspección de puente y pavimento operativas |
 | **Sprint 6** | EP-02.3 — Slice 6 | Roles, áreas, permisos por punto | US-13, US-14 | 16 (+ buffer) | Roles y permisos validados |
