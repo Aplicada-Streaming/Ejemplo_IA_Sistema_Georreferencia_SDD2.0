@@ -1,13 +1,19 @@
 **Proyecto:** Sistema de Gestión de Relevamientos Georreferenciados de Vialidad
 **Documento:** CU-06-capturar-punto-georreferenciado_v1.0.md
-**Versión:** 1.0
-**Estado:** Borrador
-**Fecha:** 2026-04-26
+**Versión:** 1.1
+**Estado:** Aprobado (re-planteo de modo móvil → recorrido)
+**Fecha:** 2026-04-27
 **Autor:** Generado por SA-02 via orquestador
 
 ---
 
-# CU-06 — Capturar punto georreferenciado (modo detenido y modo móvil)
+# CU-06 — Capturar punto georreferenciado (modo detenido y modo recorrido)
+
+> **Nota terminológica (v1.1):** "Modo recorrido" es la nomenclatura UX visible al
+> usuario. El campo `captureMode` interno conserva el string `"movil"` por compat
+> con datos previos. El flujo es disparado por la **foto del usuario** (no por
+> un timer GPS), tal como ya se describía en este documento — la v1.0 del código
+> implementaba un loop automático sin fotos que se reemplaza en US-08 v1.1.
 
 **Código:** CU-06
 **Actor primario:** Relevador o Colaborador asignado
@@ -42,13 +48,27 @@
 9. El sistema procesa la foto localmente (normalización, thumb) según parámetros de la plantilla.
 10. El sistema persiste eventos en outbox local y refresca el mapa.
 
-## Flujo alternativo — Modo móvil con radio configurable
+## Flujo alternativo — Modo recorrido con radio configurable
 
-1a. El usuario cambió el modo a `movil`. La plantilla define un radio (default ~10m).
-2a. Al sacar foto, el sistema obtiene el GPS actual.
-3a. Si la posición está **dentro del radio** del último Punto creado en este modo, la foto se asocia a ese Punto.
-4a. Si la posición está **fuera del radio**, se crea un nuevo Punto con la nueva foto.
-5a. El usuario puede cambiar a modo `detenido` en cualquier momento.
+> UX label: "Recorrido". `captureMode` interno: `"movil"` (string sin cambios).
+
+1a. El usuario inicia la sesión de "Recorrido" en la pantalla `/surveys/{id}/track`.
+    El sistema arranca el monitoreo GPS en background con foreground service
+    (notif persistente — DT-bg-tracking) pero **NO crea ningún punto**.
+2a. El loop GPS actualiza la última posición conocida cada N segundos
+    (intervalo de muestreo del template, default 10s).
+3a. Al sacar foto, el sistema usa la última posición conocida (o la pide fresh).
+4a. Si **NO hay punto activo**: se crea un nuevo Punto en la posición actual
+    (lazy creation — sin fotos no hay puntos vacíos) y la foto se asocia. Ese
+    Punto pasa a ser el "punto activo".
+5a. Si **HAY punto activo** y la posición está **dentro del radio** del Punto
+    activo, la foto se asocia al mismo Punto.
+6a. Si la posición está **fuera del radio** (detectado por el loop antes del
+    siguiente disparo de foto), el Punto activo se libera. La próxima foto
+    crea un nuevo Punto activo.
+7a. Al **finalizar** la sesión, el Punto activo (si existe) queda como Punto
+    regular en BD. Los datos del template (campos custom) se completan luego
+    en web post-captura.
 
 ## Flujo alternativo — Reubicar marcador antes de tomar foto
 
@@ -81,7 +101,14 @@
 ## Criterios de aceptación
 
 - **CA-06.1** — *Given* modo `detenido` con marcador seleccionado, *when* el usuario toma una foto, *then* la foto se asocia al marcador actual sin crear un nuevo Punto.
-- **CA-06.2** — *Given* modo `movil` con radio = 10m y un punto creado en (0,0), *when* el usuario toma foto a 5m del punto, *then* la foto se asocia al mismo Punto. *When* toma foto a 15m del punto, *then* se crea un nuevo Punto.
+- **CA-06.2** — *Given* modo recorrido (`captureMode="movil"`) con radio = 10m
+  y un punto activo en (0,0), *when* el usuario toma foto a 5m del punto,
+  *then* la foto se asocia al mismo Punto. *When* el monitoreo GPS detecta
+  posición a 15m (fuera del radio), libera el punto activo y la **siguiente
+  foto** crea un nuevo Punto.
+- **CA-06.2.bis** — *Given* recorrido recién iniciado sin fotos tomadas,
+  *when* el usuario finaliza la sesión, *then* **no se crea ningún Punto**
+  (lazy creation, no hay puntos vacíos).
 - **CA-06.3** — *Given* permiso de ubicación denegado, *when* el usuario presiona el botón de cámara, *then* aparece S1-LOC-DENY con opción a configuración.
 - **CA-06.4** — *Given* GPS con precisión 80m y threshold 50m, *when* el sistema obtiene el fix, *then* aparece S3-LOWACC.
 - **CA-06.5** — *Given* relevamiento creado en plantilla con `gps_timeout_seconds=30`, *when* no hay fix tras 30s, *then* aparece S3-TIMEOUT.

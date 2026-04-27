@@ -70,15 +70,23 @@ public sealed class MauiCameraCaptureService : ICameraCaptureService
         }
     }
 
+    /// <remarks>
+    /// Permissions.* requiere UI thread. Wrapping en MainThread.InvokeOnMainThreadAsync por
+    /// consistencia con MauiGeolocationService — si la cámara se invoca desde un handler
+    /// que no está en UI thread (ej. desde un loop), también crashea.
+    /// </remarks>
     private static async Task<CameraCaptureResult?> EnsureCameraPermissionAsync()
     {
-        var status = await Permissions.CheckStatusAsync<Permissions.Camera>();
+        var status = await MainThread.InvokeOnMainThreadAsync(
+            () => Permissions.CheckStatusAsync<Permissions.Camera>());
         if (status == PermissionStatus.Granted) return null;
 
-        status = await Permissions.RequestAsync<Permissions.Camera>();
+        status = await MainThread.InvokeOnMainThreadAsync(
+            () => Permissions.RequestAsync<Permissions.Camera>());
         if (status == PermissionStatus.Granted) return null;
 
-        var isPermanent = !Permissions.ShouldShowRationale<Permissions.Camera>();
+        var isPermanent = await MainThread.InvokeOnMainThreadAsync(
+            () => !Permissions.ShouldShowRationale<Permissions.Camera>());
         return new CameraCaptureResult.PermissionDenied(isPermanent);
     }
 }

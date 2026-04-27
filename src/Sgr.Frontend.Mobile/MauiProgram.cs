@@ -61,6 +61,15 @@ public static class MauiProgram
         // viva en la app; la lógica de Start/Stop la maneja la página de trazado.
         builder.Services.AddSingleton<IContinuousGpsTracker, MauiContinuousGpsTracker>();
 
+        // DT-bg-tracking: foreground service host. Android usa el real, otros
+        // platforms el no-op. La selección es compile-time vía symbol ANDROID.
+#if ANDROID
+        builder.Services.AddSingleton<IForegroundTrackingHost,
+            Platforms.Android.Tracking.AndroidForegroundTrackingHost>();
+#else
+        builder.Services.AddSingleton<IForegroundTrackingHost, NoopForegroundTrackingHost>();
+#endif
+
         // Resolver de profile desde la plantilla del survey (E.5.a). Scoped porque
         // depende de ISgrApiClient que también es scoped en BlazorWebView.
         builder.Services.AddScoped<ICaptureProfileResolver, RemoteCaptureProfileResolver>();

@@ -17,7 +17,7 @@ Cuando un Punto nuevo llega al backend durante la sincronización, el sistema ej
 2. Identifica como candidatos a fusión los pares que cumplen **todas** las condiciones:
    - Pertenecen al mismo relevamiento.
    - Fueron creados por **colaboradores distintos** (no aplica a Puntos del mismo creador).
-   - Distancia geodésica ≤ `merge_radius_m` (default = `radio del modo móvil` de la plantilla, típicamente 10m).
+   - Distancia geodésica ≤ `merge_radius_m` (default = `movil_radius_m` de la plantilla — el mismo radio del modo recorrido — típicamente 10m).
    - Diferencia de timestamps ≤ `merge_time_window` (default = 24h).
    - El par no está marcado previamente como `mantenido_separado`.
 3. Marca el par como `CandidatoAFusión` en estado `pendiente`. **No fusiona automáticamente.**

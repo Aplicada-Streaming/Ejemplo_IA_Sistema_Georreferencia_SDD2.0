@@ -5,21 +5,22 @@
 @inject IOutboxEnqueueService Enqueue
 @inject IOutboxDrainer Drainer
 @inject ICaptureProfileResolver CaptureProfile
+@inject ICameraCaptureService Camera
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
 
-<PageTitle>SGR · Trazado móvil</PageTitle>
+<PageTitle>SGR · Recorrido</PageTitle>
 
-<MudText Typo="Typo.h5" Class="mb-3">Trazado en movimiento</MudText>
+<MudText Typo="Typo.h5" Class="mb-3">Recorrido</MudText>
 
 <MudPaper Class="pa-4" Elevation="2">
 
     @if (Profile is not null)
     {
-        <MudAlert Severity="Severity.Info" Class="mb-3" Icon="@Icons.Material.Filled.DirectionsCar">
-            Modo móvil: cada @Profile.SamplingIntervalSeconds s se pide un GPS y
-            se acepta si la precisión es ≤@Profile.AccuracyThresholdMeters m y está más de
-            @Profile.DiscardRadiusMeters m del último punto aceptado.
+        <MudAlert Severity="Severity.Info" Class="mb-3" Icon="@Icons.Material.Filled.DirectionsCar" Dense="true">
+            Modo recorrido. Las fotos sucesivas se asocian al mismo punto mientras
+            estés a menos de <strong>@Profile.DiscardRadiusMeters m</strong> del activo.
+            Al alejarte, la próxima foto crea un punto nuevo.
         </MudAlert>
     }
     else
@@ -29,55 +30,74 @@
         </MudAlert>
     }
 
+    @* ───── Estado de la sesión ───── *@
     @if (_isRunning)
     {
-        <MudPaper Class="pa-3 mb-3" Elevation="0" Style="background: var(--mud-palette-success-lighten);">
-            <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
-                <MudProgressCircular Size="Size.Small" Color="Color.Success" Indeterminate="true" />
-                <MudText Typo="Typo.body1"><strong>Trazando…</strong></MudText>
-            </MudStack>
-        </MudPaper>
-    }
-    else if (_accepted > 0 || _discarded > 0)
-    {
-        <MudPaper Class="pa-3 mb-3" Elevation="0" Style="background: var(--mud-palette-background-grey);">
-            <MudText Typo="Typo.body2"><strong>Sesión detenida.</strong> Los puntos aceptados quedaron en el outbox.</MudText>
-        </MudPaper>
+        @* Estado del punto activo *@
+        @if (_active is not null)
+        {
+            <MudPaper Class="pa-3 mb-3" Elevation="0" Style="background: var(--mud-palette-success-lighten);">
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.PinDrop" Color="Color.Success" />
+                    <div>
+                        <MudText Typo="Typo.body1"><strong>Punto activo</strong> · @_active.PhotoCount foto@(_active.PhotoCount == 1 ? "" : "s")</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            lat @_active.Latitude.ToString("F6") · lng @_active.Longitude.ToString("F6") ·
+                            abierto @_active.OpenedAtUtc.ToLocalTime().ToString("HH:mm:ss")
+                        </MudText>
+                    </div>
+                </MudStack>
+            </MudPaper>
+        }
+        else if (_radiusBanner is not null)
+        {
+            <MudAlert Severity="Severity.Warning" Class="mb-3" Icon="@Icons.Material.Filled.MyLocation">
+                @_radiusBanner
+            </MudAlert>
+        }
+        else
+        {
+            <MudPaper Class="pa-3 mb-3" Elevation="0" Style="background: var(--mud-palette-background-grey);">
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                    <MudText Typo="Typo.body1">Esperando primera foto…</MudText>
+                </MudStack>
+            </MudPaper>
+        }
+
+        @* Indicador de fix actual *@
+        @if (_lastFix is not null)
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary mb-3" Style="display:block;">
+                Posición actual: lat @_lastFix.Latitude.ToString("F6") ·
+                lng @_lastFix.Longitude.ToString("F6") ·
+                ±@_lastFix.AccuracyMeters.ToString("F0") m
+                @if (_lastFix.LowAccuracy)
+                {
+                    <span style="color: var(--mud-palette-warning);"> (baja precisión)</span>
+                }
+            </MudText>
+        }
+        else
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary mb-3" Style="display:block;">
+                Esperando primer fix GPS…
+            </MudText>
+        }
     }
     else
     {
         <MudPaper Class="pa-4 mb-3" Elevation="0" Style="text-align:center; background: var(--mud-palette-background-grey);">
             <MudIcon Icon="@Icons.Material.Filled.Route" Size="Size.Large" Color="Color.Default" />
             <MudText Typo="Typo.body1" Class="mt-2 mud-text-secondary">
-                Tap "Iniciar" para arrancar el trazado.
+                Tap "Iniciar recorrido" para arrancar.
             </MudText>
-        </MudPaper>
-    }
-
-    @* ---- Contadores ---- *@
-    <MudPaper Class="pa-3 mb-3" Elevation="0" Style="border:1px solid var(--mud-palette-lines-default); border-radius:8px;">
-        <MudStack Row Justify="Justify.SpaceAround" Spacing="2">
-            <div style="text-align:center;">
-                <MudText Typo="Typo.h4" Color="Color.Success">@_accepted</MudText>
-                <MudText Typo="Typo.caption" Class="mud-text-secondary">aceptados</MudText>
-            </div>
-            <MudDivider Vertical="true" FlexItem="true" />
-            <div style="text-align:center;">
-                <MudText Typo="Typo.h4" Color="Color.Warning">@_discarded</MudText>
-                <MudText Typo="Typo.caption" Class="mud-text-secondary">descartados</MudText>
-            </div>
-        </MudStack>
-    </MudPaper>
-
-    @if (_lastPoint is not null)
-    {
-        <MudPaper Class="pa-3 mb-3" Elevation="0" Style="background: var(--mud-palette-info-lighten);">
-            <MudText Typo="Typo.body2"><strong>Último aceptado</strong></MudText>
-            <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                lat @_lastPoint.Latitude.ToString("F6") · lng @_lastPoint.Longitude.ToString("F6") ·
-                ±@_lastPoint.AccuracyMeters.ToString("F0") m ·
-                @_lastPoint.CapturedAtUtc.ToLocalTime().ToString("HH:mm:ss")
-            </MudText>
+            @if (_pointsCreated > 0)
+            {
+                <MudText Typo="Typo.caption" Class="mt-1 mud-text-secondary">
+                    Sesión anterior: @_pointsCreated punto@(_pointsCreated == 1 ? "" : "s") con @_photosTotal foto@(_photosTotal == 1 ? "" : "s") en outbox.
+                </MudText>
+            }
         </MudPaper>
     }
 
@@ -88,22 +108,33 @@
         </MudAlert>
     }
 
-    @* ---- Acciones ---- *@
+    @* ───── Botón principal ───── *@
     @if (!_isRunning)
     {
         <MudButton Variant="Variant.Filled" Color="Color.Success" FullWidth="true"
+                   Size="Size.Large"
                    StartIcon="@Icons.Material.Filled.PlayArrow"
                    Disabled="@(Profile is null)"
                    OnClick="StartAsync">
-            Iniciar trazado
+            Iniciar recorrido
         </MudButton>
     }
     else
     {
-        <MudButton Variant="Variant.Filled" Color="Color.Error" FullWidth="true"
+        @* Botón gigante "Tomar foto" — la acción principal del recorrido *@
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                   Size="Size.Large"
+                   StartIcon="@Icons.Material.Filled.PhotoCamera"
+                   Disabled="@(_capturing || _lastFix is null)"
+                   OnClick="CapturePhotoAsync"
+                   Style="height: 64px; font-size: 1.1rem;">
+            @(_capturing ? "Procesando..." : (_active is null ? "Tomar foto (crea punto)" : "Tomar foto"))
+        </MudButton>
+
+        <MudButton Variant="Variant.Outlined" Color="Color.Error" FullWidth="true" Class="mt-2"
                    StartIcon="@Icons.Material.Filled.Stop"
                    OnClick="StopAsync">
-            Detener trazado
+            Finalizar recorrido
         </MudButton>
     }
 
@@ -125,52 +156,74 @@
 @code {
     [Parameter] public Guid SurveyId { get; set; }
 
-    /// <summary>Profile resuelto al iniciar el tracking — sale del template del relevamiento.</summary>
+    /// <summary>Profile resuelto al entrar a la página — sale del template del relevamiento.
+    /// El radio del template se usa para decidir asociación de fotos al punto activo.</summary>
     private CaptureModeProfile? Profile { get; set; }
 
     private bool _isRunning;
-    private int _accepted;
-    private int _discarded;
-    private TrackedPoint? _lastPoint;
+    private bool _capturing;
+
+    /// <summary>Punto activo: la próxima foto se asocia a éste mientras estemos dentro
+    /// de Profile.DiscardRadiusMeters de su posición original.</summary>
+    private ActivePoint? _active;
+
+    /// <summary>Última posición conocida del GPS — actualizada por el loop de monitoreo.</summary>
+    private LastFix? _lastFix;
+
+    /// <summary>Banner mostrado cuando el usuario sale del radio del punto activo.</summary>
+    private string? _radiusBanner;
+
     private string? _lastError;
+
+    /// <summary>Contadores de la sesión (post-stop): cuántos puntos se crearon y cuántas fotos se asociaron.</summary>
+    private int _pointsCreated;
+    private int _photosTotal;
 
     private CancellationTokenSource? _cts;
 
     protected override async Task OnInitializedAsync()
     {
-        // Pre-cargamos el profile al entrar a la página, así el header muestra valores correctos.
         Profile = await CaptureProfile.ResolveAsync(SurveyId, mode: "movil");
     }
 
     private async Task StartAsync()
     {
         if (_isRunning) return;
+
+        // DT-bg-tracking: pedir POST_NOTIFICATIONS antes de arrancar el FG service.
+        await EnsureNotificationPermissionAsync();
+
         _isRunning = true;
-        _accepted = 0;
-        _discarded = 0;
-        _lastPoint = null;
+        _active = null;
+        _lastFix = null;
+        _radiusBanner = null;
         _lastError = null;
+        _pointsCreated = 0;
+        _photosTotal = 0;
+
+        Profile ??= await CaptureProfile.ResolveAsync(SurveyId, mode: "movil");
+
+        // Modo monitor: forzamos DiscardRadiusMeters=null para que el tracker emita
+        // CADA fix válido. La asociación foto→punto la decide esta página.
+        var monitorProfile = Profile with { DiscardRadiusMeters = null };
 
         _cts?.Dispose();
         _cts = new CancellationTokenSource();
 
         var callbacks = new TrackingCallbacks(
-            OnAccepted: HandleAcceptedAsync,
-            OnDiscarded: HandleDiscardedAsync,
+            OnAccepted: HandleFixAsync,
+            OnDiscarded: null,                      // no aplica en modo monitor
             OnError: HandleErrorAsync);
-
-        // Re-resolver por si el usuario cambió de red entre Init y Start.
-        Profile ??= await CaptureProfile.ResolveAsync(SurveyId, mode: "movil");
 
         try
         {
-            await Tracker.StartAsync(Profile, callbacks, _cts.Token);
-            Snackbar.Add("Trazado iniciado.", Severity.Success);
+            await Tracker.StartAsync(monitorProfile, callbacks, _cts.Token);
+            Snackbar.Add("Recorrido iniciado. Tomá fotos cuando veas algo de interés.", Severity.Success);
         }
         catch (Exception ex)
         {
             _isRunning = false;
-            Snackbar.Add($"No se pudo iniciar el trazado: {ex.Message}", Severity.Error);
+            Snackbar.Add($"No pude iniciar el recorrido: {ex.Message}", Severity.Error);
         }
     }
 
@@ -184,52 +237,124 @@
         finally
         {
             _isRunning = false;
-            Snackbar.Add($"Trazado detenido. {_accepted} aceptado(s), {_discarded} descartado(s).",
+            _active = null;
+            _radiusBanner = null;
+            Snackbar.Add(
+                _pointsCreated == 0
+                    ? "Recorrido finalizado. No se capturó ningún punto."
+                    : $"Recorrido finalizado. {_pointsCreated} punto(s), {_photosTotal} foto(s) en el outbox.",
                 Severity.Info);
             StateHasChanged();
         }
     }
 
-    private async Task HandleAcceptedAsync(TrackedPoint p)
+    /// <summary>
+    /// Cada fix del tracker. Sólo monitoreamos posición:
+    ///   • Actualizamos _lastFix.
+    ///   • Si hay punto activo y nos alejamos > radio → liberar activo + banner.
+    /// NO encolamos puntos acá — eso lo dispara CapturePhotoAsync.
+    /// </summary>
+    private Task HandleFixAsync(TrackedPoint p) =>
+        InvokeAsync(() =>
+        {
+            _lastFix = new LastFix(p.Latitude, p.Longitude, p.AccuracyMeters, p.CapturedAtUtc, p.LowAccuracy);
+
+            if (_active is not null && Profile is not null)
+            {
+                var d = Distance.HaversineMeters(
+                    (double)_active.Latitude, (double)_active.Longitude,
+                    (double)p.Latitude, (double)p.Longitude);
+                if (d > Profile.DiscardRadiusMeters)
+                {
+                    _radiusBanner = $"Saliste del radio del punto activo ({d:F0} m > {Profile.DiscardRadiusMeters} m). " +
+                                    "La próxima foto creará un nuevo punto.";
+                    _active = null;
+                }
+            }
+            StateHasChanged();
+        });
+
+    /// <summary>
+    /// Captura una foto y la asocia al punto activo (creándolo si no existe).
+    /// </summary>
+    private async Task CapturePhotoAsync()
     {
+        if (_capturing || !_isRunning) return;
+        if (_lastFix is null)
+        {
+            Snackbar.Add("Esperando primer fix GPS…", Severity.Warning);
+            return;
+        }
+
+        _capturing = true;
+        _lastError = null;
         try
         {
-            var pointId = Guid.NewGuid();
-            await Enqueue.EnqueuePointCreatedAsync(
+            var photoId = Guid.NewGuid();
+            var photoResult = await Camera.CaptureAsync(photoId);
+            if (photoResult is not CameraCaptureResult.Ok photo)
+            {
+                if (photoResult is CameraCaptureResult.Cancelled) return;   // silencioso
+                _lastError = photoResult switch
+                {
+                    CameraCaptureResult.PermissionDenied => "Permiso de cámara denegado.",
+                    CameraCaptureResult.NotSupported => "Este dispositivo no soporta cámara.",
+                    CameraCaptureResult.Error e => $"Error al capturar: {e.Message}",
+                    _ => "No se pudo capturar la foto.",
+                };
+                return;
+            }
+
+            // Snapshot del fix actual (puede haber cambiado mientras estaba la cámara abierta).
+            var fix = _lastFix;
+            if (fix is null) { _lastError = "Sin fix GPS al volver de la cámara."; return; }
+
+            // Si no hay punto activo, lo creamos lazy en la posición actual.
+            if (_active is null)
+            {
+                var newPointId = Guid.NewGuid();
+                await Enqueue.EnqueuePointCreatedAsync(
+                    surveyId: SurveyId,
+                    pointId: newPointId,
+                    latitude: fix.Latitude,
+                    longitude: fix.Longitude,
+                    accuracyM: fix.AccuracyMeters,
+                    captureMode: Profile?.Mode ?? "movil",
+                    timestamp: fix.CapturedAtUtc);
+
+                _active = new ActivePoint(newPointId, fix.Latitude, fix.Longitude,
+                    PhotoCount: 0, OpenedAtUtc: fix.CapturedAtUtc);
+                _pointsCreated++;
+                _radiusBanner = null;
+            }
+
+            // Encolar la foto al punto activo.
+            await Enqueue.EnqueuePhotoCapturedAsync(
                 surveyId: SurveyId,
-                pointId: pointId,
-                latitude: p.Latitude,
-                longitude: p.Longitude,
-                accuracyM: p.AccuracyMeters,
-                captureMode: Profile?.Mode ?? "movil",
-                timestamp: p.CapturedAtUtc);
+                pointId: _active.Id,
+                photoId: photoId,
+                localFilePath: photo.LocalFilePath,
+                fileName: photo.FileName,
+                mimeType: photo.MimeType,
+                comment: null,
+                capturedAt: photo.CapturedAtUtc);
+
+            _active = _active with { PhotoCount = _active.PhotoCount + 1 };
+            _photosTotal++;
 
             _ = Drainer.DrainOnceAsync();
-
-            await InvokeAsync(() =>
-            {
-                _accepted++;
-                _lastPoint = p;
-                _lastError = null;
-                StateHasChanged();
-            });
+            Snackbar.Add($"Foto encolada (punto activo: {_active.PhotoCount} foto(s)).", Severity.Success);
         }
         catch (Exception ex)
         {
-            await InvokeAsync(() =>
-            {
-                _lastError = $"Falló al encolar punto: {ex.Message}";
-                StateHasChanged();
-            });
+            _lastError = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            _capturing = false;
+            StateHasChanged();
         }
     }
-
-    private Task HandleDiscardedAsync(TrackedPointDiscarded d) =>
-        InvokeAsync(() =>
-        {
-            _discarded++;
-            StateHasChanged();
-        });
 
     private Task HandleErrorAsync(string message) =>
         InvokeAsync(() =>
@@ -238,10 +363,60 @@
             StateHasChanged();
         });
 
+    /// <summary>
+    /// Pide POST_NOTIFICATIONS si todavía no está concedido. Sin este permiso
+    /// (Android 13+) la notif del FG service no se muestra y el SO puede
+    /// throttear más rápido el service.
+    ///
+    /// IMPORTANTE: Permissions.* tiene que invocarse desde el UI thread del SO.
+    /// Los handlers de Blazor pueden ejecutar en un thread pool, así que envolvemos
+    /// con MainThread.InvokeOnMainThreadAsync — sin esto crashea con
+    /// "Permission request must be invoked on main thread".
+    /// </summary>
+    private static async Task EnsureNotificationPermissionAsync()
+    {
+#if ANDROID
+        if (Android.OS.Build.VERSION.SdkInt < Android.OS.BuildVersionCodes.Tiramisu) return;
+
+        var status = await MainThread.InvokeOnMainThreadAsync(
+            () => Permissions.CheckStatusAsync<PostNotificationsPermission>());
+        if (status == PermissionStatus.Granted) return;
+
+        await MainThread.InvokeOnMainThreadAsync(
+            () => Permissions.RequestAsync<PostNotificationsPermission>());
+#else
+        await Task.CompletedTask;
+#endif
+    }
+
+#if ANDROID
+    private sealed class PostNotificationsPermission : Permissions.BasePlatformPermission
+    {
+        public override (string androidPermission, bool isRuntime)[] RequiredPermissions =>
+            new (string, bool)[] { ("android.permission.POST_NOTIFICATIONS", true) };
+    }
+#endif
+
     public async ValueTask DisposeAsync()
     {
         try { _cts?.Cancel(); } catch { }
         try { await Tracker.StopAsync(); } catch { }
         _cts?.Dispose();
     }
+
+    /// <summary>State del punto activo durante el recorrido.</summary>
+    private sealed record ActivePoint(
+        Guid Id,
+        decimal Latitude,
+        decimal Longitude,
+        int PhotoCount,
+        DateTime OpenedAtUtc);
+
+    /// <summary>Última posición conocida del loop GPS.</summary>
+    private sealed record LastFix(
+        decimal Latitude,
+        decimal Longitude,
+        decimal AccuracyMeters,
+        DateTime CapturedAtUtc,
+        bool LowAccuracy);
 }

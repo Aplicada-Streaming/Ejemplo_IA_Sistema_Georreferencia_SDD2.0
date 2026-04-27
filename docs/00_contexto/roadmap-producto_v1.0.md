@@ -81,13 +81,13 @@ Roadmap estructurado en **Fases → Épicas → Milestones**, alineado a la deci
 
 **Objetivo:** entregar la propuesta de valor diferencial: dos relevadores trabajando offline en el mismo relevamiento se ven mutuamente al sincronizar.
 
-**Criterio de completitud:** el flujo de captura colaborativa funciona con plantilla raíz, modo detenido y modo móvil con radio configurable.
+**Criterio de completitud:** el flujo de captura colaborativa funciona con plantilla raíz, modo detenido y modo recorrido con radio configurable.
 
 | Épica | Descripción | Sprint estimado | Depende de |
 |---|---|---|---|
 | EP-01.1 Sincronización entre dos dispositivos | Dos dispositivos crean puntos offline en el mismo relevamiento, sincronizan, ven los puntos del otro. Outbox + GUIDs en cliente + pull diferencial + LWW por campo + reintentos exponenciales. | Slice 1 | EP-00.1, EP-00.2 |
 | EP-01.2 Captura modo detenido + plantilla raíz | Diálogo unificado de captura, foto + GPS + asociación a marcador actual, modo detenido como default. Plantilla genérica raíz con campos comunes. | Slice 2 | EP-01.1 |
-| EP-01.3 Modo móvil con radio configurable | Asociación de fotos al punto actual mientras el dispositivo esté dentro del radio; salida del radio crea nuevo punto. Conmutación de modos durante la captura. | Slice 3 | EP-01.2 |
+| EP-01.3 Modo recorrido con radio configurable | UX label "Recorrido"; `captureMode="movil"` interno. Disparado por foto del usuario: la foto se asocia al punto activo si está dentro del radio del template; salida del radio libera el activo, próxima foto crea uno nuevo. Lazy creation: sin fotos no hay puntos. | Slice 3 | EP-01.2 |
 
 ---
 

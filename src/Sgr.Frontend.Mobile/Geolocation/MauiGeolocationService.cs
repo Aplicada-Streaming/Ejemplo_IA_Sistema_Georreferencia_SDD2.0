@@ -106,25 +106,24 @@ public sealed class MauiGeolocationService : IGeolocationService
     }
 
     /// <summary>S0 + S1: pide permiso y, si denegado, devuelve el resultado terminal correspondiente.</summary>
+    /// <remarks>
+    /// Permissions.* requiere UI thread. El tracker corre en background (Task.Run en el loop GPS),
+    /// así que envolvemos cada llamada en MainThread.InvokeOnMainThreadAsync — sin esto el tracker
+    /// crashea con "Permission request must be invoked on main thread" la primera vez que pide fix.
+    /// </remarks>
     private static async Task<GeolocationResult?> EnsureLocationPermissionAsync()
     {
-        var status = await Permissions.CheckStatusAsync<Permissions.LocationWhenInUse>();
+        var status = await MainThread.InvokeOnMainThreadAsync(
+            () => Permissions.CheckStatusAsync<Permissions.LocationWhenInUse>());
         if (status == PermissionStatus.Granted) return null;
 
-        if (Permissions.ShouldShowRationale<Permissions.LocationWhenInUse>())
-        {
-            // En Android, el usuario denegó antes pero NO eligió "no preguntar más" aún.
-            status = await Permissions.RequestAsync<Permissions.LocationWhenInUse>();
-        }
-        else
-        {
-            status = await Permissions.RequestAsync<Permissions.LocationWhenInUse>();
-        }
+        status = await MainThread.InvokeOnMainThreadAsync(
+            () => Permissions.RequestAsync<Permissions.LocationWhenInUse>());
 
         if (status == PermissionStatus.Granted) return null;
 
-        // Si después de pedirlo no se concedió y no podemos volver a pedirlo, marcamos permanent.
-        var isPermanent = !Permissions.ShouldShowRationale<Permissions.LocationWhenInUse>();
+        var isPermanent = await MainThread.InvokeOnMainThreadAsync(
+            () => !Permissions.ShouldShowRationale<Permissions.LocationWhenInUse>());
         return new GeolocationResult.PermissionDenied(isPermanent);
     }
 }

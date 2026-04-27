@@ -5,6 +5,7 @@ namespace Sgr.Frontend.Mobile.Geolocation;
 public sealed class MauiContinuousGpsTracker : IContinuousGpsTracker, IDisposable
 {
     private readonly IGeolocationService _geo;
+    private readonly IForegroundTrackingHost _fgHost;
     private readonly ILogger<MauiContinuousGpsTracker> _logger;
 
     private CancellationTokenSource? _internalCts;
@@ -13,9 +14,11 @@ public sealed class MauiContinuousGpsTracker : IContinuousGpsTracker, IDisposabl
 
     public MauiContinuousGpsTracker(
         IGeolocationService geo,
+        IForegroundTrackingHost fgHost,
         ILogger<MauiContinuousGpsTracker> logger)
     {
         _geo = geo;
+        _fgHost = fgHost;
         _logger = logger;
     }
 
@@ -29,14 +32,24 @@ public sealed class MauiContinuousGpsTracker : IContinuousGpsTracker, IDisposabl
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(callbacks);
 
-        if (profile.SamplingIntervalSeconds is null || profile.DiscardRadiusMeters is null)
+        // SamplingInterval es siempre requerido (sin él no hay loop). DiscardRadius
+        // es opcional desde US-08 v1.1 — modo "monitor only" para Recorrido:
+        // emite cada fix válido por accuracy; la página decide la asociación.
+        if (profile.SamplingIntervalSeconds is null)
             throw new ArgumentException(
-                "El perfil no es de modo continuo (faltan SamplingInterval / DiscardRadius).", nameof(profile));
+                "El perfil no es de modo continuo (falta SamplingInterval).", nameof(profile));
 
         await _stateLock.WaitAsync(ct);
         try
         {
             if (IsRunning) throw new InvalidOperationException("El tracker ya está corriendo.");
+
+            // DT-bg-tracking: levantamos el foreground service ANTES de arrancar el loop
+            // para que el SO no nos throttée si el usuario sale de la app.
+            // En Windows / iOS el host es no-op.
+            _fgHost.Start(
+                title: "SGR · Trazado activo",
+                description: $"Capturando puntos cada {profile.SamplingIntervalSeconds}s.");
 
             _internalCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             var token = _internalCts.Token;
@@ -64,6 +77,7 @@ public sealed class MauiContinuousGpsTracker : IContinuousGpsTracker, IDisposabl
             _internalCts.Dispose();
             _internalCts = null;
             _loopTask = null;
+            _fgHost.Stop();   // baja la notif persistente y libera el FG service
             _logger.LogInformation("Continuous GPS tracker stopped.");
         }
         finally
@@ -78,7 +92,7 @@ public sealed class MauiContinuousGpsTracker : IContinuousGpsTracker, IDisposabl
         CancellationToken ct)
     {
         var threshold = (decimal)profile.AccuracyThresholdMeters;
-        var discardRadius = profile.DiscardRadiusMeters!.Value;
+        var discardRadius = profile.DiscardRadiusMeters;   // null = modo monitor (Recorrido US-08 v1.1)
         var interval = TimeSpan.FromSeconds(profile.SamplingIntervalSeconds!.Value);
 
         TrackedPoint? lastAccepted = null;
@@ -100,16 +114,27 @@ public sealed class MauiContinuousGpsTracker : IContinuousGpsTracker, IDisposabl
                 {
                     var (lat, lng, acc, capturedAt, lowAcc) = maybe.Value;
 
-                    // Filtro 1: precisión.
-                    if (acc > threshold)
+                    if (discardRadius is null)
                     {
+                        // Modo monitor (Recorrido US-08 v1.1): emitimos TODO fix.
+                        // SIN filtro de accuracy — la UI muestra la precisión (campo lowAcc)
+                        // y el usuario decide cuándo tomar foto. El filtro estricto sólo
+                        // tiene sentido en el path "auto-crear punto" del modo legacy
+                        // (ya removido del flujo Recorrido).
+                        var accepted = new TrackedPoint(lat, lng, acc, capturedAt, lowAcc);
+                        lastAccepted = accepted;
+                        await callbacks.OnAccepted(accepted);
+                    }
+                    else if (acc > threshold)
+                    {
+                        // Modo legacy (radio configurado): filtro 1 = precisión.
                         if (callbacks.OnDiscarded is not null)
                             await callbacks.OnDiscarded(new TrackedPointDiscarded(
                                 lat, lng, acc, DiscardReason.BelowAccuracyThreshold, null));
                     }
                     else
                     {
-                        // Filtro 2: radio dinámico vs último aceptado.
+                        // Modo legacy: filtro 2 = radio dinámico vs último aceptado.
                         double? dist = null;
                         if (lastAccepted is not null)
                         {
@@ -118,7 +143,7 @@ public sealed class MauiContinuousGpsTracker : IContinuousGpsTracker, IDisposabl
                                 (double)lat, (double)lng);
                         }
 
-                        if (dist is not null && dist.Value < discardRadius)
+                        if (dist is not null && dist.Value < discardRadius.Value)
                         {
                             if (callbacks.OnDiscarded is not null)
                                 await callbacks.OnDiscarded(new TrackedPointDiscarded(

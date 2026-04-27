@@ -27,4 +27,13 @@
        declarar el permiso da UX consistente y permite filtrado en Play Store. -->
   <uses-permission android:name="android.permission.CAMERA" />
   <uses-feature android:name="android.hardware.camera" android:required="false" />
+
+  <!-- Foreground service para tracking continuo (DT-bg-tracking).
+       FOREGROUND_SERVICE — base, requerido a partir de Android 9.
+       FOREGROUND_SERVICE_LOCATION — Android 14+ exige declarar el tipo específico.
+       POST_NOTIFICATIONS — Android 13+ requiere permiso para mostrar la notif persistente
+       que mantiene el service vivo. Si se niega, degradamos a "foreground only". -->
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 </manifest>
