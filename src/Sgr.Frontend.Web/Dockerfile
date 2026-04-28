@@ -6,7 +6,6 @@ WORKDIR /src
 COPY Directory.Build.props ./
 COPY global.json ./
 COPY sgr.sln ./
-COPY sgr.no-mobile.slnf ./
 COPY src/Sgr.Domain/*.csproj                 src/Sgr.Domain/
 COPY src/Sgr.Persistence/*.csproj            src/Sgr.Persistence/
 COPY src/Sgr.Modules.Identity/*.csproj       src/Sgr.Modules.Identity/

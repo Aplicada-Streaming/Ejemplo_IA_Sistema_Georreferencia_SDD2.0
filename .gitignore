@@ -435,6 +435,8 @@ photos-local/
 # User Secrets locales sin checkin
 appsettings.Local.json
 appsettings.Development.local.json
+# .env.local del flujo run-local.bat (la regla *.env de arriba no matchea sufijo .local)
+.env.local
 # DBs de desarrollo
 *.mdf
 *.ldf
