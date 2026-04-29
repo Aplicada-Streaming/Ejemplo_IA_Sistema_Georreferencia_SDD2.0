@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.WebUtilities;
 using MudBlazor.Services;
 using Sgr.Frontend.Web.Api;
 using Sgr.Frontend.Web.Auth;
@@ -29,11 +30,28 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     {
         options.LoginPath = "/login";
         options.LogoutPath = "/auth/logout";
-        options.AccessDeniedPath = "/login?error=acceso-denegado";
+        // AccessDeniedPath es PathString y NO admite query string: si le pasamos
+        // "/login?error=acceso-denegado", el `?` se escapa a `%3F` y luego ASP.NET
+        // appendea su propio `?ReturnUrl=...`, produciendo
+        // /login%3Ferror=acceso-denegado?ReturnUrl=... que no matchea ninguna ruta
+        // y devuelve 404. Armamos la URL completa en el evento.
+        options.AccessDeniedPath = "/login";
         options.Cookie.Name = "sgr.web.auth";
         options.Cookie.HttpOnly = true;
         options.Cookie.SameSite = SameSiteMode.Lax;
         options.SlidingExpiration = false;
+        options.Events.OnRedirectToAccessDenied = context =>
+        {
+            var returnUrl = context.Properties.RedirectUri
+                ?? (context.Request.PathBase + context.Request.Path + context.Request.QueryString);
+            var url = QueryHelpers.AddQueryString("/login", new Dictionary<string, string?>
+            {
+                ["error"] = "acceso-denegado",
+                ["ReturnUrl"] = returnUrl,
+            });
+            context.Response.Redirect(url);
+            return Task.CompletedTask;
+        };
     });
 
 builder.Services.AddAuthorization();
