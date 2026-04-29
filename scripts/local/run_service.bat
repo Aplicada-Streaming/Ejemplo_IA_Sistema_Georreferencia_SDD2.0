@@ -19,9 +19,15 @@ REM ============================================================
 set "PROJECT_ROOT=%~dp0..\.."
 set "API_PROJECT=%PROJECT_ROOT%\src\Sgr.Backend.Api\Sgr.Backend.Api.csproj"
 
-REM Build previo
-call "%~dp0build_service.bat"
-if %ERRORLEVEL% neq 0 goto :error
+REM Build previo (omitir si SGR_SKIP_BUILD=1 -- lo usa run_all.bat
+REM cuando ya hizo build_all.bat serial antes de arrancar el stack)
+if "%SGR_SKIP_BUILD%"=="1" (
+    echo Saltando build de Sgr.Backend.Api ^(SGR_SKIP_BUILD=1^)...
+    echo.
+) else (
+    call "%~dp0build_service.bat"
+    if !ERRORLEVEL! neq 0 goto :error
+)
 
 REM Matar instancia previa si existe
 taskkill /F /IM Sgr.Backend.Api.exe /T 2>nul

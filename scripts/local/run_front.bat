@@ -18,9 +18,15 @@ REM ============================================================
 set "PROJECT_ROOT=%~dp0..\.."
 set "WEB_PROJECT=%PROJECT_ROOT%\src\Sgr.Frontend.Web\Sgr.Frontend.Web.csproj"
 
-REM Build previo
-call "%~dp0build_front.bat"
-if %ERRORLEVEL% neq 0 goto :error
+REM Build previo (omitir si SGR_SKIP_BUILD=1 -- lo usa run_all.bat
+REM cuando ya hizo build_all.bat serial antes de arrancar el stack)
+if "%SGR_SKIP_BUILD%"=="1" (
+    echo Saltando build de Sgr.Frontend.Web ^(SGR_SKIP_BUILD=1^)...
+    echo.
+) else (
+    call "%~dp0build_front.bat"
+    if !ERRORLEVEL! neq 0 goto :error
+)
 
 if not defined ASPNETCORE_URLS set "ASPNETCORE_URLS=http://localhost:5100"
 if not defined ASPNETCORE_ENVIRONMENT set "ASPNETCORE_ENVIRONMENT=Development"
