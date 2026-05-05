@@ -28,10 +28,17 @@ COPY src/Sgr.Modules.Storage/       src/Sgr.Modules.Storage/
 COPY src/Sgr.Modules.Points/        src/Sgr.Modules.Points/
 COPY src/Sgr.Frontend.Web/          src/Sgr.Frontend.Web/
 
+# Importante: NO usar --no-restore aqui. Con SDK 10.0.203 y Blazor Web Apps, el
+# discovery de static web assets del framework (wwwroot/_framework/blazor.web.js)
+# se gatilla durante el chain de restore de publish; con --no-restore el manifest
+# staticwebassets.endpoints.json se emite SIN las entradas de _framework y los
+# archivos fisicos blazor.web.js{,.br,.gz} nunca llegan a /app/publish/wwwroot.
+# El RUN dotnet restore previo sigue cacheando el download de NuGet en la layer;
+# el restore implicito de publish es un no-op (~1s) porque obj/project.assets.json
+# ya existe y los paquetes estan en ~/.nuget/packages.
 RUN dotnet publish src/Sgr.Frontend.Web/Sgr.Frontend.Web.csproj \
     -c Release \
-    -o /app/publish \
-    --no-restore
+    -o /app/publish
 
 # ---------- runtime stage ----------
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
